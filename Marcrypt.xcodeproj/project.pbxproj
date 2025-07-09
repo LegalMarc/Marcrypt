@@ -186,7 +186,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 25507EC62E1DF0CD002C547F /* Build configuration list for PBXProject "Bulk PDF Decrypt" */;
+			buildConfigurationList = 25507EC62E1DF0CD002C547F /* Build configuration list for PBXProject "Marcrypt" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -524,7 +524,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		25507EC62E1DF0CD002C547F /* Build configuration list for PBXProject "Bulk PDF Decrypt" */ = {
+		25507EC62E1DF0CD002C547F /* Build configuration list for PBXProject "Marcrypt" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				25507EED2E1DF0CE002C547F /* Debug */,
