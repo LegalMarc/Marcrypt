@@ -34,6 +34,7 @@ enum ProcessingStatus: Sendable {
 @MainActor
 final class FileViewModel: ObservableObject {
     @Published var items: [FileItem] = []
+    @Published var hasEncrypted: Bool = false
     
     // add files, avoid duplicates, and start async status-check
     @MainActor
@@ -43,6 +44,7 @@ final class FileViewModel: ObservableObject {
             items.append(item)
             Task { await checkStatus(for: item) }
         }
+        updateHasEncrypted()
     }
     
     // async check: encrypted / notEncrypted / corrupted
@@ -82,16 +84,17 @@ final class FileViewModel: ObservableObject {
     private func update(_ item: FileItem, _ status: ProcessingStatus, _ msg: String?) {
         item.status       = status
         item.errorMessage = msg
+        updateHasEncrypted()
     }
     
     // decrypt all encrypted items - first decrypt in memory, then save if any succeeded
     @MainActor
     func decryptAll(with password: String, completion: @escaping (Bool, Bool) -> Void) {
         Task { @MainActor in
-            // Only get items that are currently in "encrypted" status (not previously processed)
-            let encryptedItems = self.items.filter { $0.status == .encrypted }
+            // Get items that are encrypted OR previously failed (for retry)
+            let decryptableItems = self.items.filter { $0.status == .encrypted || $0.status == .decryptionFailed }
             
-            guard !encryptedItems.isEmpty else {
+            guard !decryptableItems.isEmpty else {
                 completion(false, false)
                 return
             }
@@ -99,16 +102,16 @@ final class FileViewModel: ObservableObject {
             // Process each item and collect results
             var results: [(success: Bool, item: FileItem)] = []
             
-            for item in encryptedItems {
+            for item in decryptableItems {
                 let result = await self.processDecryption(for: item, password: password)
                 results.append(result)
             }
             
             // Analyze results
             let successCount = results.filter { $0.success }.count
-            let totalEncrypted = encryptedItems.count
+            let totalDecryptable = decryptableItems.count
             
-            completion(successCount > 0, totalEncrypted > 0 && successCount == 0)
+            completion(successCount > 0, totalDecryptable > 0 && successCount == 0)
         }
     }
     
@@ -170,22 +173,25 @@ final class FileViewModel: ObservableObject {
         Task { @MainActor in
             // Try to access destination (should work since user selected it)
             let hasAccess = destination.startAccessingSecurityScopedResource()
-            if hasAccess {
-                defer { destination.stopAccessingSecurityScopedResource() }
+            
+            do {
+                // Get successfully decrypted items
+                let decryptedItems = self.items.filter { $0.status == .decrypted && $0.decryptedDocument != nil }
+                
+                for item in decryptedItems {
+                    guard let doc = item.decryptedDocument else { continue }
+                    
+                    let outName = item.url.lastPathComponent
+                    let outURL = destination.appendingPathComponent(outName)
+                    
+                    if !doc.write(to: outURL) {
+                        self.update(item, .decryptionFailed, "Failed to write decrypted file to destination.")
+                    }
+                }
             }
             
-            // Get successfully decrypted items
-            let decryptedItems = self.items.filter { $0.status == .decrypted && $0.decryptedDocument != nil }
-            
-            for item in decryptedItems {
-                guard let doc = item.decryptedDocument else { continue }
-                
-                let outName = item.url.deletingPathExtension().lastPathComponent + " (no crypt).pdf"
-                let outURL = destination.appendingPathComponent(outName)
-                
-                if !doc.write(to: outURL) {
-                    self.update(item, .decryptionFailed, "Failed to write decrypted file to destination.")
-                }
+            if hasAccess {
+                destination.stopAccessingSecurityScopedResource()
             }
         }
     }
@@ -193,10 +199,10 @@ final class FileViewModel: ObservableObject {
 
     
     @MainActor
-    var hasEncrypted: Bool { 
-        items.contains { item in
-            item.status == .encrypted
-        } 
+    private func updateHasEncrypted() {
+        hasEncrypted = items.contains { item in
+            item.status == .encrypted || item.status == .decryptionFailed
+        }
     }
     
     @MainActor
@@ -207,6 +213,7 @@ final class FileViewModel: ObservableObject {
     @MainActor
     func clearAllFiles() {
         items.removeAll()
+        updateHasEncrypted()
     }
 }
 
@@ -227,8 +234,8 @@ struct ContentView: View {
             FooterView()
         }
         .padding(24)
-        .frame(width: 580, height: 650)
-        .background(Color(red: 0.97, green: 0.97, blue: 0.98))
+        .frame(width: 720, height: 650)
+        .background(Color(red: 0.95, green: 0.95, blue: 0.96))
         .alert("Enter PDF Password", isPresented: $showPwdPrompt) {
             SecureField("Password", text: $password)
             Button("Cancel", role: .cancel) { 
@@ -245,7 +252,7 @@ struct ContentView: View {
             }
             Button("Try Again") { attemptDecryption() }
         } message: {
-            Text("All encrypted files failed to decrypt. Please try a different password or cancel to stop.")
+            Text("Some or all files failed to decrypt. Please try a different password or cancel to stop.")
         }
         .alert(item: $alertItem) { item in
             let title: String
@@ -276,34 +283,34 @@ struct ContentView: View {
     private var actionButtons: some View {
         HStack(spacing: 12) {
             // Decrypt Button
-            Button {
+            Button(action: {
                 password = ""; showPwdPrompt = true
-            } label: {
+            }) {
                 HStack(spacing: 8) {
                     Image(systemName: "bolt.fill")
                         .font(.system(size: 16, weight: .semibold))
-                    Text("Decrypt Encrypted File(s)")
+                    Text("Decrypt File(s)")
                         .font(.system(size: 16, weight: .semibold))
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .padding(.horizontal, 20)
+                .foregroundColor(.white)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(vm.hasEncrypted ? Color(red: 0.3, green: 0.6, blue: 0.7) : Color(red: 0.7, green: 0.7, blue: 0.75).opacity(0.4))
+                        .shadow(color: vm.hasEncrypted ? Color(red: 0.3, green: 0.6, blue: 0.7).opacity(0.2) : Color.clear, radius: 6, y: 3)
+                )
             }
             .disabled(!vm.hasEncrypted)
             .buttonStyle(.plain)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(vm.hasEncrypted ? Color(red: 0.3, green: 0.6, blue: 0.7) : Color(red: 0.7, green: 0.7, blue: 0.75).opacity(0.4))
-                    .shadow(color: vm.hasEncrypted ? Color(red: 0.3, green: 0.6, blue: 0.7).opacity(0.2) : Color.clear, radius: 6, y: 3)
-            )
-            .foregroundColor(.white)
             .scaleEffect(vm.hasEncrypted ? 1.0 : 0.98)
             .animation(.easeInOut(duration: 0.2), value: vm.hasEncrypted)
             
             // Clear Files Button
-            Button {
+            Button(action: {
                 vm.clearAllFiles()
-            } label: {
+            }) {
                 HStack(spacing: 8) {
                     Image(systemName: "trash.fill")
                         .font(.system(size: 16, weight: .semibold))
@@ -313,15 +320,15 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .padding(.horizontal, 20)
+                .foregroundColor(.white)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(vm.hasFiles ? Color(red: 0.8, green: 0.4, blue: 0.4) : Color(red: 0.7, green: 0.7, blue: 0.75).opacity(0.4))
+                        .shadow(color: vm.hasFiles ? Color(red: 0.8, green: 0.4, blue: 0.4).opacity(0.2) : Color.clear, radius: 6, y: 3)
+                )
             }
             .disabled(!vm.hasFiles)
             .buttonStyle(.plain)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(vm.hasFiles ? Color(red: 0.8, green: 0.4, blue: 0.4) : Color(red: 0.7, green: 0.7, blue: 0.75).opacity(0.4))
-                    .shadow(color: vm.hasFiles ? Color(red: 0.8, green: 0.4, blue: 0.4).opacity(0.2) : Color.clear, radius: 6, y: 3)
-            )
-            .foregroundColor(.white)
             .scaleEffect(vm.hasFiles ? 1.0 : 0.98)
             .animation(.easeInOut(duration: 0.2), value: vm.hasFiles)
         }
@@ -334,12 +341,18 @@ struct ContentView: View {
             if anySucceeded {
                 // Some files succeeded, show save dialog
                 self.chooseSaveDestination()
+                // Reset password prompts since we're done
+                self.showPwdPrompt = false
+                self.showPasswordRetryPrompt = false
             } else if allFailed {
-                // All files failed, show retry dialog
+                // All files failed, show retry dialog (infinite retries until cancel)
+                self.showPwdPrompt = false
                 self.showPasswordRetryPrompt = true
             } else {
-                // No encrypted files to decrypt
-                // This shouldn't happen since button is disabled when no encrypted files
+                // No decryptable files
+                // This shouldn't happen since button is disabled when no decryptable files
+                self.showPwdPrompt = false
+                self.showPasswordRetryPrompt = false
             }
         }
     }
@@ -349,6 +362,8 @@ struct ContentView: View {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
+        panel.message = "Choose a folder to save the decrypted PDF files"
+        panel.prompt = "Save Here"
         if panel.runModal() == .OK, let dest = panel.url {
             vm.saveDecryptedFiles(to: dest)
         }
@@ -366,7 +381,7 @@ struct InputCardView: View {
             dropZone
             browseBar
         }
-        .background(Color.white)
+        .background(Color(red: 0.95, green: 0.95, blue: 0.96))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
         .overlay(
@@ -389,7 +404,7 @@ struct InputCardView: View {
         .frame(maxWidth: .infinity, minHeight: 160)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color(red: 0.95, green: 0.96, blue: 0.98))
+                .fill(Color(red: 0.97, green: 0.97, blue: 0.97))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12)
@@ -423,16 +438,19 @@ struct InputCardView: View {
     // ───────── Browse… button ─────────
     private var browseBar: some View {
         HStack {
-            Button("Browse...") { openPanel() }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color(red: 0.3, green: 0.6, blue: 0.7))
-                        .shadow(color: Color(red: 0.3, green: 0.6, blue: 0.7).opacity(0.2), radius: 4, y: 2)
-                )
-                .foregroundColor(.white)
-                .font(.system(size: 15, weight: .semibold))
+            Button(action: { openPanel() }) {
+                Text("Browse...")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color(red: 0.3, green: 0.6, blue: 0.7))
+                            .shadow(color: Color(red: 0.3, green: 0.6, blue: 0.7).opacity(0.2), radius: 4, y: 2)
+                    )
+            }
+            .buttonStyle(.plain)
             Spacer()
         }
         .padding(20)
@@ -505,7 +523,7 @@ struct FileRow: View {
         .padding(.vertical, 16)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white)
+                .fill(Color(red: 0.99, green: 0.99, blue: 0.99))
                 .shadow(color: .black.opacity(0.03), radius: 6, x: 0, y: 1)
         )
         .overlay(
@@ -586,16 +604,27 @@ struct StatusView: View {
 struct FooterView: View {
     var body: some View {
         VStack(spacing: 6) {
-            Text("Released by Marc Mandel under the MIT license at github.com/LegalMarc/Marcrypt")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(Color(red: 0.6, green: 0.6, blue: 0.6))
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Text("Got bugs? Message me at linkedin.com/in/marcmandel/")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(Color(red: 0.6, green: 0.6, blue: 0.6))
-                .lineLimit(1)
-                .truncationMode(.tail)
+            HStack(spacing: 0) {
+                Text("Released by Marc Mandel under the MIT license at ")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color(red: 0.6, green: 0.6, blue: 0.6))
+                Text("github.com/LegalMarc/Marcrypt")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color(red: 0.2, green: 0.5, blue: 0.8))
+            }
+            .lineLimit(1)
+            .truncationMode(.tail)
+            
+            HStack(spacing: 0) {
+                Text("Got bugs? Message me at ")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color(red: 0.6, green: 0.6, blue: 0.6))
+                Text("linkedin.com/in/marcmandel/")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color(red: 0.2, green: 0.5, blue: 0.8))
+            }
+            .lineLimit(1)
+            .truncationMode(.tail)
         }
         .multilineTextAlignment(.center)
         .padding(.top, 8)
