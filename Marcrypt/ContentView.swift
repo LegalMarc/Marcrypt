@@ -10,18 +10,23 @@
 import SwiftUI
 import PDFKit
 import UniformTypeIdentifiers
+import Foundation
+import AppKit
+import Combine
 
 // MARK: - Data Models
-final class FileItem: Identifiable, ObservableObject {
+@MainActor
+final class FileItem: Identifiable, ObservableObject, Sendable {
     let id   = UUID()
     let url  : URL
     @Published var status: ProcessingStatus = .checking
     @Published var errorMessage: String?     = nil
+    var decryptedDocument: PDFDocument?     = nil
     
     init(url: URL) { self.url = url }
 }
 
-enum ProcessingStatus {
+enum ProcessingStatus: Sendable {
     case checking, encrypted, notEncrypted, corrupted, decrypted, decryptionFailed
 }
 
@@ -31,6 +36,7 @@ final class FileViewModel: ObservableObject {
     @Published var items: [FileItem] = []
     
     // add files, avoid duplicates, and start async status-check
+    @MainActor
     func add(urls: [URL]) {
         for url in urls where !items.contains(where: { $0.url == url }) {
             let item = FileItem(url: url)
@@ -40,72 +46,130 @@ final class FileViewModel: ObservableObject {
     }
     
     // async check: encrypted / notEncrypted / corrupted
+    @MainActor
     private func checkStatus(for item: FileItem) async {
-        await withCheckedContinuation { continuation in
+        // Perform the check on a background thread
+        let (status, errorMessage) = await withCheckedContinuation { (continuation: CheckedContinuation<(ProcessingStatus, String?), Never>) in
             DispatchQueue.global(qos: .userInitiated).async {
-                defer { continuation.resume() }
-                
                 guard item.url.startAccessingSecurityScopedResource() else {
-                    self.update(item, .corrupted, "Permission denied.")
+                    continuation.resume(returning: (.corrupted, "Permission denied to access file."))
                     return
                 }
                 defer { item.url.stopAccessingSecurityScopedResource() }
                 
                 guard let pdf = PDFDocument(url: item.url) else {
-                    self.update(item, .corrupted, "Unreadable PDF.")
+                    continuation.resume(returning: (.corrupted, "This file could not be read and may be corrupted or not a valid PDF file."))
                     return
                 }
-                self.update(item, pdf.isEncrypted ? .encrypted : .notEncrypted, nil)
+                continuation.resume(returning: (pdf.isEncrypted ? .encrypted : .notEncrypted, nil))
             }
         }
+        
+        // Update on main actor
+        update(item, status, errorMessage)
     }
     
     // helper: mutate on main-thread
+    @MainActor
     private func update(_ item: FileItem, _ status: ProcessingStatus, _ msg: String?) {
-        DispatchQueue.main.async {
-            item.status       = status
-            item.errorMessage = msg
+        item.status       = status
+        item.errorMessage = msg
+    }
+    
+    // decrypt all encrypted items - first decrypt in memory, then save if any succeeded
+    @MainActor
+    func decryptAll(with password: String, completion: @escaping (Bool, Bool) -> Void) {
+        Task { @MainActor in
+            // Get encrypted items
+            let encryptedItems = self.items.filter { $0.status == .encrypted }
+            
+            // Process each item and collect results
+            var results: [(success: Bool, item: FileItem)] = []
+            
+            for item in encryptedItems {
+                let result = await self.processDecryption(for: item, password: password)
+                results.append(result)
+            }
+            
+            // Analyze results
+            let successCount = results.filter { $0.success }.count
+            let totalEncrypted = encryptedItems.count
+            
+            completion(successCount > 0, totalEncrypted > 0 && successCount == 0)
         }
     }
     
-    // decrypt all encrypted items
-    func decryptAll(with password: String, destination: URL) {
-        Task.detached {
+    // Process single item decryption
+    @MainActor
+    private func processDecryption(for item: FileItem, password: String) async -> (success: Bool, item: FileItem) {
+        // Perform the heavy work on a background thread
+        let result = await withCheckedContinuation { (continuation: CheckedContinuation<(Bool, PDFDocument?, String?), Never>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                guard item.url.startAccessingSecurityScopedResource() else {
+                    continuation.resume(returning: (false, nil, "Permission denied to access file."))
+                    return
+                }
+                defer { item.url.stopAccessingSecurityScopedResource() }
+                
+                guard let doc = PDFDocument(url: item.url) else {
+                    continuation.resume(returning: (false, nil, "File could not be read or is corrupted."))
+                    return
+                }
+                
+                guard doc.unlock(withPassword: password) else {
+                    continuation.resume(returning: (false, nil, "Wrong password."))
+                    return
+                }
+                
+                // Successfully decrypted
+                continuation.resume(returning: (true, doc, nil))
+            }
+        }
+        
+        // Update UI on main actor
+        if result.0 {
+            // Success
+            item.decryptedDocument = result.1
+            self.update(item, .decrypted, nil)
+            return (true, item)
+        } else {
+            // Failure
+            self.update(item, .decryptionFailed, result.2 ?? "Unknown error")
+            return (false, item)
+        }
+    }
+    
+    // Save successfully decrypted files to destination
+    @MainActor
+    func saveDecryptedFiles(to destination: URL) {
+        Task { @MainActor in
             guard destination.startAccessingSecurityScopedResource() else { return }
             defer { destination.stopAccessingSecurityScopedResource() }
             
-            for item in self.items where item.status == .encrypted {
-                await self.decrypt(item, password: password, dest: destination)
+            // Get successfully decrypted items
+            let decryptedItems = self.items.filter { $0.status == .decrypted && $0.decryptedDocument != nil }
+            
+            for item in decryptedItems {
+                guard let doc = item.decryptedDocument else { continue }
+                
+                let outName = item.url.deletingPathExtension().lastPathComponent + " (no crypt).pdf"
+                let outURL = destination.appendingPathComponent(outName)
+                
+                if !doc.write(to: outURL) {
+                    self.update(item, .decryptionFailed, "Failed to write decrypted file to destination.")
+                }
             }
         }
     }
     
-    // single-file decryption
-    private func decrypt(_ item: FileItem, password: String, dest: URL) async {
-        guard item.url.startAccessingSecurityScopedResource() else {
-            update(item, .decryptionFailed, "Permission denied.")
-            return
-        }
-        defer { item.url.stopAccessingSecurityScopedResource() }
-        
-        guard let doc = PDFDocument(url: item.url) else {
-            update(item, .decryptionFailed, "Unreadable PDF.")
-            return
-        }
-        guard doc.unlock(withPassword: password) else {
-            update(item, .decryptionFailed, "Wrong password.")
-            return
-        }
-        let outName = item.url.deletingPathExtension().lastPathComponent + " (no crypt).pdf"
-        let outURL  = dest.appendingPathComponent(outName)
-        guard doc.write(to: outURL) else {
-            update(item, .decryptionFailed, "Failed to write file.")
-            return
-        }
-        update(item, .decrypted, nil)
-    }
+
     
-    var hasEncrypted: Bool { items.contains { $0.status == .encrypted } }
+    @MainActor
+    var hasEncrypted: Bool { 
+        items.contains { item in
+            item.status == .encrypted
+        } 
+    }
 }
 
 // MARK: - Main Content View
@@ -113,6 +177,7 @@ struct ContentView: View {
     @StateObject private var vm = FileViewModel()
     @State private var password = ""
     @State private var showPwdPrompt = false
+    @State private var showPasswordRetryPrompt = false
     @State private var alertItem: FileItem?
     
     var body: some View {
@@ -124,20 +189,43 @@ struct ContentView: View {
             FooterView()
         }
         .padding()
-        .frame(width: 450, height: 650)
+        .frame(width: 580, height: 650)
         .alert("Enter PDF Password", isPresented: $showPwdPrompt) {
             SecureField("Password", text: $password)
             Button("Cancel", role: .cancel) { }
-            Button("Decrypt") { chooseDestinationAndDecrypt() }
+            Button("Decrypt") { attemptDecryption() }
         } message: {
             Text("Please enter the password for the encrypted PDF files.")
         }
+        .alert("Decryption Failed", isPresented: $showPasswordRetryPrompt) {
+            SecureField("Password", text: $password)
+            Button("Cancel", role: .cancel) { }
+            Button("Try Again") { attemptDecryption() }
+        } message: {
+            Text("All encrypted files failed to decrypt. Please try a different password.")
+        }
         .alert(item: $alertItem) { item in
-            Alert(title: Text(item.status == .decryptionFailed ? "Decryption Failed"
-                                                               : item.status == .corrupted ? "Corrupted File"
-                                                               : "Information"),
-                  message: Text(item.errorMessage ?? "Unknown error."),
-                  dismissButton: .default(Text("OK")))
+            let title: String
+            let message: String
+            
+            switch item.status {
+            case .decryptionFailed:
+                title = "Decryption Failed"
+                message = item.errorMessage ?? "Unknown error occurred during decryption."
+            case .corrupted:
+                title = "Corrupted File"
+                message = item.errorMessage ?? "This file could not be read and may be corrupted or not a valid PDF file."
+            case .notEncrypted:
+                title = "Information"
+                message = item.errorMessage ?? "This file is not encrypted."
+            default:
+                title = "Information"
+                message = item.errorMessage ?? "Unknown error."
+            }
+            
+            return Alert(title: Text(title),
+                        message: Text(message),
+                        dismissButton: .default(Text("OK")))
         }
     }
     
@@ -158,14 +246,30 @@ struct ContentView: View {
         .font(.system(.title3, design: .default).weight(.semibold))
     }
     
-    private func chooseDestinationAndDecrypt() {
+    private func attemptDecryption() {
         guard !password.isEmpty else { return }
+        
+        vm.decryptAll(with: password) { anySucceeded, allFailed in
+            if anySucceeded {
+                // Some files succeeded, show save dialog
+                self.chooseSaveDestination()
+            } else if allFailed {
+                // All files failed, show retry dialog
+                self.showPasswordRetryPrompt = true
+            } else {
+                // No encrypted files to decrypt
+                // This shouldn't happen since button is disabled when no encrypted files
+            }
+        }
+    }
+    
+    private func chooseSaveDestination() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
         if panel.runModal() == .OK, let dest = panel.url {
-            vm.decryptAll(with: password, destination: dest)
+            vm.saveDecryptedFiles(to: dest)
         }
     }
 }
@@ -208,14 +312,15 @@ struct InputCardView: View {
         )
         .padding([.horizontal, .top], 15)
 
-        // ✅ FIX: async drop-handler wrapped in Task & awaited properly
-        .onDrop(of: [UTType.pdf], isTargeted: $isTargeted) { providers in
-            Task {   // run drop handling in an async context
-                for provider in providers {
-                    if await provider.canLoadObject(ofClass: NSURL.self) {
-                        if let nsurl = try? await provider.loadObject(ofClass: NSURL.self),
-                           let url   = nsurl as URL? {
-                            await MainActor.run { vm.add(urls: [url]) }
+        // ✅ FIX: drop-handler using proper file URL handling
+        .onDrop(of: [UTType.fileURL], isTargeted: $isTargeted) { providers in
+            for provider in providers {
+                if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                    provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
+                        if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
+                            DispatchQueue.main.async {
+                                vm.add(urls: [url])
+                            }
                         }
                     }
                 }
@@ -242,7 +347,7 @@ struct InputCardView: View {
         panel.allowsMultipleSelection = true
         panel.allowedContentTypes = [UTType.pdf]
         if panel.runModal() == .OK {
-            Task { await MainActor.run { vm.add(urls: panel.urls) } }
+            vm.add(urls: panel.urls)
         }
     }
 }
@@ -265,11 +370,12 @@ struct FileListView: View {
     
     private func handleTap(on item: FileItem) {
         switch item.status {
-        case .decryptionFailed, .corrupted: alertItem = item
+        case .decryptionFailed, .corrupted: 
+            alertItem = item
         case .notEncrypted:
             let info = FileItem(url: item.url)
             info.status = .notEncrypted
-            info.errorMessage = "This file is not encrypted. No action required."
+            info.errorMessage = "This file is a valid PDF but is not encrypted, so no action is needed."
             alertItem = info
         default: break
         }
@@ -305,12 +411,31 @@ struct StatusView: View {
     var body: some View {
         Group {
             switch status {
-            case .checking:         ProgressView().scaleEffect(0.7)
-            case .encrypted:        Text("[Encrypted]").bold().foregroundColor(.orange)
-            case .notEncrypted:     Text("[Not Encrypted]").foregroundColor(Color("textSecondary"))
-            case .corrupted:        Text("[Corrupted]").bold().foregroundColor(Color("accentRed"))
-            case .decrypted:        Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
-            case .decryptionFailed: Image(systemName: "xmark.circle.fill").foregroundColor(Color("accentRed"))
+            case .checking:         
+                ProgressView().scaleEffect(0.7)
+            case .encrypted:        
+                Text("[Encrypted]")
+                    .bold()
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color("accentRed"))
+                    .cornerRadius(6)
+            case .notEncrypted:     
+                Text("[Not Encrypted]")
+                    .foregroundColor(Color("textSecondary"))
+            case .corrupted:        
+                Text("[Corrupted]")
+                    .bold()
+                    .foregroundColor(Color("accentRed"))
+            case .decrypted:        
+                Text("[Decryption Succeeded]")
+                    .bold()
+                    .foregroundColor(Color("accentTeal"))
+            case .decryptionFailed: 
+                Text("[Decryption Failed]")
+                    .bold()
+                    .foregroundColor(Color("accentRed"))
             }
         }
         .font(.caption)
@@ -323,10 +448,16 @@ struct FooterView: View {
     var body: some View {
         VStack(spacing: 5) {
             Text("Released by Marc Mandel under the MIT license at github.com/LegalMarc/Marcrypt")
+                .font(.callout)
+                .foregroundColor(Color("textSecondary"))
+                .lineLimit(1)
+                .truncationMode(.tail)
             Text("Got bugs? Message me at linkedin.com/in/marcmandel/")
+                .font(.callout)
+                .foregroundColor(Color("textSecondary"))
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
-        .font(.callout)
-        .foregroundColor(Color("textSecondary"))
         .multilineTextAlignment(.center)
     }
 }
