@@ -14,6 +14,33 @@ import Foundation
 import AppKit
 import Combine
 
+// --- Custom Color Palette (Modeled after Marcompare) ---
+struct CustomColors {
+    // Using NSColor initializers for precise HSB control on macOS
+    // A - Main window background color
+    static let appBackground = Color(NSColor(calibratedHue: 0.58, saturation: 0.04, brightness: 0.98, alpha: 1.0)) // Very light, slightly cool off-white/gray
+    
+    // C - Background for input areas and primary cards
+    static let contentBackground = Color(NSColor(calibratedHue: 0.58, saturation: 0.07, brightness: 0.93, alpha: 1.0)) // Light muted teal-ish gray for cards/inputs
+
+    // B - Color for primary action buttons, links, and highlights
+    static let accentColor = Color(NSColor(calibratedHue: 0.53, saturation: 0.60, brightness: 0.68, alpha: 1.0)) // Soothing teal
+    
+    // New color for destructive actions like "Clear" or "Delete"
+    static let destructiveColor = Color(NSColor(calibratedRed: 0.85, green: 0.35, blue: 0.35, alpha: 1.0))
+    
+    // Standard text colors for adaptivity
+    static let primaryText = Color(NSColor.labelColor)
+    static let secondaryText = Color(NSColor.secondaryLabelColor)
+    
+    // UI element colors
+    static let shadow = Color.black.opacity(0.12)
+    static let subtleBorder = Color.black.opacity(0.1)
+    
+    // Background for secondary cards like file list items
+    static let cardBackground = Color(NSColor.windowBackgroundColor) // Adaptive white/off-white
+}
+
 // MARK: - Data Models
 @MainActor
 final class FileItem: Identifiable, ObservableObject, Sendable {
@@ -235,7 +262,7 @@ struct ContentView: View {
         }
         .padding(24)
         .frame(width: 720, height: 650)
-        .background(Color(red: 0.95, green: 0.95, blue: 0.96))
+        .background(CustomColors.appBackground.ignoresSafeArea())
         .alert("Enter PDF Password", isPresented: $showPwdPrompt) {
             SecureField("Password", text: $password)
             Button("Cancel", role: .cancel) { 
@@ -282,55 +309,31 @@ struct ContentView: View {
     // MARK: UI Helpers
     private var actionButtons: some View {
         HStack(spacing: 12) {
-            // Decrypt Button
+            // Decrypt Button (Addresses point B style for primary actions)
             Button(action: {
                 password = ""; showPwdPrompt = true
             }) {
-                HStack(spacing: 8) {
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                    Text("Decrypt File(s)")
-                        .font(.system(size: 16, weight: .semibold))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .padding(.horizontal, 20)
-                .foregroundColor(.white)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(vm.hasEncrypted ? Color(red: 0.3, green: 0.6, blue: 0.7) : Color(red: 0.7, green: 0.7, blue: 0.75).opacity(0.4))
-                        .shadow(color: vm.hasEncrypted ? Color(red: 0.3, green: 0.6, blue: 0.7).opacity(0.2) : Color.clear, radius: 6, y: 3)
-                )
+                Label("Decrypt File(s)", systemImage: "bolt.fill")
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.borderedProminent)
+            .tint(CustomColors.accentColor)
+            .controlSize(.large)
             .disabled(!vm.hasEncrypted)
-            .buttonStyle(.plain)
-            .scaleEffect(vm.hasEncrypted ? 1.0 : 0.98)
-            .animation(.easeInOut(duration: 0.2), value: vm.hasEncrypted)
-            
+
             // Clear Files Button
             Button(action: {
                 vm.clearAllFiles()
             }) {
-                HStack(spacing: 8) {
-                    Image(systemName: "trash.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                    Text("Clear Files")
-                        .font(.system(size: 16, weight: .semibold))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .padding(.horizontal, 20)
-                .foregroundColor(.white)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(vm.hasFiles ? Color(red: 0.8, green: 0.4, blue: 0.4) : Color(red: 0.7, green: 0.7, blue: 0.75).opacity(0.4))
-                        .shadow(color: vm.hasFiles ? Color(red: 0.8, green: 0.4, blue: 0.4).opacity(0.2) : Color.clear, radius: 6, y: 3)
-                )
+                Label("Clear Files", systemImage: "trash.fill")
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.borderedProminent)
+            .tint(CustomColors.destructiveColor)
+            .controlSize(.large)
             .disabled(!vm.hasFiles)
-            .buttonStyle(.plain)
-            .scaleEffect(vm.hasFiles ? 1.0 : 0.98)
-            .animation(.easeInOut(duration: 0.2), value: vm.hasFiles)
         }
     }
     
@@ -381,13 +384,10 @@ struct InputCardView: View {
             dropZone
             browseBar
         }
-        .background(Color(red: 0.95, green: 0.95, blue: 0.96))
+        .background(CustomColors.contentBackground) // Use the correct background
         .cornerRadius(16)
-        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color(red: 0.9, green: 0.9, blue: 0.9), lineWidth: 1)
-        )
+        .shadow(color: CustomColors.shadow, radius: 8, x: 0, y: 2)
+        // The explicit .overlay stroke is removed to match Marcompare's cleaner look
     }
 
     // ───────── Drag-&-Drop zone ─────────
@@ -402,15 +402,13 @@ struct InputCardView: View {
                 .foregroundColor(Color(red: 0.5, green: 0.5, blue: 0.5))
         }
         .frame(maxWidth: .infinity, minHeight: 160)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(red: 0.97, green: 0.97, blue: 0.97))
-        )
+        // REMOVE the entire .background(...) modifier from the dropZone VStack.
+        // It will now inherit the CustomColors.contentBackground from its parent.
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(
-                    isTargeted ? Color(red: 0.3, green: 0.6, blue: 0.7) : Color(red: 0.85, green: 0.85, blue: 0.85),
-                    style: StrokeStyle(lineWidth: 2, dash: isTargeted ? [] : [8, 4])
+                    isTargeted ? CustomColors.accentColor : CustomColors.subtleBorder.opacity(0.5), // Use palette colors
+                    style: StrokeStyle(lineWidth: 2.5, dash: isTargeted ? [] : [8, 4])
                 )
                 .animation(.easeInOut(duration: 0.2), value: isTargeted)
         )
@@ -441,16 +439,12 @@ struct InputCardView: View {
             Button(action: { openPanel() }) {
                 Text("Browse...")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.white)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color(red: 0.3, green: 0.6, blue: 0.7))
-                            .shadow(color: Color(red: 0.3, green: 0.6, blue: 0.7).opacity(0.2), radius: 4, y: 2)
-                    )
             }
-            .buttonStyle(.plain)
+            .tint(CustomColors.accentColor) // Use tint for coloring
+            .buttonStyle(.borderedProminent) // Use a standard, modern style
+            .controlSize(.large) // For better padding
             Spacer()
         }
         .padding(20)
@@ -506,14 +500,14 @@ struct FileRow: View {
         HStack(spacing: 12) {
             Image(systemName: "doc.text.fill")
                 .font(.system(size: 20, weight: .medium))
-                .foregroundColor(Color(red: 0.3, green: 0.6, blue: 0.7))
+                .foregroundColor(CustomColors.accentColor) // Use accent color
                 .frame(width: 24, height: 24)
             
             Text(item.url.lastPathComponent)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .font(.system(size: 15, weight: .medium, design: .monospaced))
-                .foregroundColor(Color(red: 0.2, green: 0.2, blue: 0.2))
+                .foregroundColor(CustomColors.primaryText) // Use primary text color
             
             Spacer(minLength: 12)
             
@@ -523,12 +517,12 @@ struct FileRow: View {
         .padding(.vertical, 16)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color(red: 0.99, green: 0.99, blue: 0.99))
+                .fill(CustomColors.cardBackground) // Use the new adaptive card background
                 .shadow(color: .black.opacity(0.03), radius: 6, x: 0, y: 1)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color(red: 0.9, green: 0.9, blue: 0.9), lineWidth: 1)
+                .stroke(CustomColors.subtleBorder, lineWidth: 1) // Use subtle border
         )
     }
 }
@@ -552,47 +546,47 @@ struct StatusView: View {
                     .padding(.vertical, 5)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(red: 0.8, green: 0.4, blue: 0.4))
+                            .fill(CustomColors.destructiveColor)
                     )
             case .notEncrypted:     
                 Text("[Not Encrypted]")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(Color(red: 0.5, green: 0.5, blue: 0.5))
+                    .foregroundColor(CustomColors.secondaryText)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(red: 0.5, green: 0.5, blue: 0.5).opacity(0.1))
+                            .fill(CustomColors.secondaryText.opacity(0.1))
                     )
             case .corrupted:        
                 Text("[Corrupted]")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(Color(red: 0.8, green: 0.4, blue: 0.4))
+                    .foregroundColor(CustomColors.destructiveColor)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(red: 0.8, green: 0.4, blue: 0.4).opacity(0.1))
+                            .fill(CustomColors.destructiveColor.opacity(0.1))
                     )
             case .decrypted:        
                 Text("[Decryption Succeeded]")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(Color(red: 0.3, green: 0.6, blue: 0.7))
+                    .foregroundColor(CustomColors.accentColor)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(red: 0.3, green: 0.6, blue: 0.7).opacity(0.15))
+                            .fill(CustomColors.accentColor.opacity(0.15))
                     )
             case .decryptionFailed: 
                 Text("[Decryption Failed]")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(Color(red: 0.8, green: 0.4, blue: 0.4))
+                    .foregroundColor(CustomColors.destructiveColor)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(red: 0.8, green: 0.4, blue: 0.4).opacity(0.1))
+                            .fill(CustomColors.destructiveColor.opacity(0.1))
                     )
             }
         }
@@ -607,10 +601,10 @@ struct FooterView: View {
             HStack(spacing: 0) {
                 Text("Released by Marc Mandel under the MIT license at ")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(Color(red: 0.6, green: 0.6, blue: 0.6))
+                    .foregroundColor(CustomColors.secondaryText)
                 Text("github.com/LegalMarc/Marcrypt")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(Color(red: 0.2, green: 0.5, blue: 0.8))
+                    .foregroundColor(CustomColors.accentColor) // Use accent color for links
             }
             .lineLimit(1)
             .truncationMode(.tail)
@@ -618,10 +612,10 @@ struct FooterView: View {
             HStack(spacing: 0) {
                 Text("Got bugs? Message me at ")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(Color(red: 0.6, green: 0.6, blue: 0.6))
+                    .foregroundColor(CustomColors.secondaryText)
                 Text("linkedin.com/in/marcmandel/")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(Color(red: 0.2, green: 0.5, blue: 0.8))
+                    .foregroundColor(CustomColors.accentColor) // Use accent color for links
             }
             .lineLimit(1)
             .truncationMode(.tail)
