@@ -51,14 +51,22 @@ final class FileViewModel: ObservableObject {
         // Perform the check on a background thread
         let (status, errorMessage) = await withCheckedContinuation { (continuation: CheckedContinuation<(ProcessingStatus, String?), Never>) in
             DispatchQueue.global(qos: .userInitiated).async {
+                // First try without security scoped access (for files opened via browser)
+                if let pdf = PDFDocument(url: item.url) {
+                    continuation.resume(returning: (pdf.isEncrypted ? .encrypted : .notEncrypted, nil))
+                    return
+                }
+                
+                // If that fails, try with security scoped access (for dropped files)
                 guard item.url.startAccessingSecurityScopedResource() else {
-                    continuation.resume(returning: (.corrupted, "Permission denied to access file."))
+                    // If we can't access the file at all, it might be corrupted or permission denied
+                    continuation.resume(returning: (.corrupted, "Cannot access file - may be corrupted or permission denied."))
                     return
                 }
                 defer { item.url.stopAccessingSecurityScopedResource() }
                 
                 guard let pdf = PDFDocument(url: item.url) else {
-                    continuation.resume(returning: (.corrupted, "This file could not be read and may be corrupted or not a valid PDF file."))
+                    continuation.resume(returning: (.corrupted, "File could not be read - may be corrupted or not a valid PDF."))
                     return
                 }
                 continuation.resume(returning: (pdf.isEncrypted ? .encrypted : .notEncrypted, nil))
@@ -80,8 +88,13 @@ final class FileViewModel: ObservableObject {
     @MainActor
     func decryptAll(with password: String, completion: @escaping (Bool, Bool) -> Void) {
         Task { @MainActor in
-            // Get encrypted items
+            // Only get items that are currently in "encrypted" status (not previously processed)
             let encryptedItems = self.items.filter { $0.status == .encrypted }
+            
+            guard !encryptedItems.isEmpty else {
+                completion(false, false)
+                return
+            }
             
             // Process each item and collect results
             var results: [(success: Bool, item: FileItem)] = []
@@ -105,6 +118,18 @@ final class FileViewModel: ObservableObject {
         // Perform the heavy work on a background thread
         let result = await withCheckedContinuation { (continuation: CheckedContinuation<(Bool, PDFDocument?, String?), Never>) in
             DispatchQueue.global(qos: .userInitiated).async {
+                // First try without security scoped access (for files opened via browser)
+                if let doc = PDFDocument(url: item.url) {
+                    if doc.unlock(withPassword: password) {
+                        continuation.resume(returning: (true, doc, nil))
+                        return
+                    } else {
+                        continuation.resume(returning: (false, nil, "Wrong password."))
+                        return
+                    }
+                }
+                
+                // If that fails, try with security scoped access (for dropped files)
                 guard item.url.startAccessingSecurityScopedResource() else {
                     continuation.resume(returning: (false, nil, "Permission denied to access file."))
                     return
@@ -143,8 +168,11 @@ final class FileViewModel: ObservableObject {
     @MainActor
     func saveDecryptedFiles(to destination: URL) {
         Task { @MainActor in
-            guard destination.startAccessingSecurityScopedResource() else { return }
-            defer { destination.stopAccessingSecurityScopedResource() }
+            // Try to access destination (should work since user selected it)
+            let hasAccess = destination.startAccessingSecurityScopedResource()
+            if hasAccess {
+                defer { destination.stopAccessingSecurityScopedResource() }
+            }
             
             // Get successfully decrypted items
             let decryptedItems = self.items.filter { $0.status == .decrypted && $0.decryptedDocument != nil }
@@ -170,6 +198,16 @@ final class FileViewModel: ObservableObject {
             item.status == .encrypted
         } 
     }
+    
+    @MainActor
+    var hasFiles: Bool {
+        !items.isEmpty
+    }
+    
+    @MainActor
+    func clearAllFiles() {
+        items.removeAll()
+    }
 }
 
 // MARK: - Main Content View
@@ -181,28 +219,33 @@ struct ContentView: View {
     @State private var alertItem: FileItem?
     
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 24) {
             InputCardView(vm: vm)
             FileListView(vm: vm, alertItem: $alertItem)
             Spacer()
-            decryptButton
+            actionButtons
             FooterView()
         }
-        .padding()
+        .padding(24)
         .frame(width: 580, height: 650)
+        .background(Color(red: 0.97, green: 0.97, blue: 0.98))
         .alert("Enter PDF Password", isPresented: $showPwdPrompt) {
             SecureField("Password", text: $password)
-            Button("Cancel", role: .cancel) { }
+            Button("Cancel", role: .cancel) { 
+                password = ""
+            }
             Button("Decrypt") { attemptDecryption() }
         } message: {
             Text("Please enter the password for the encrypted PDF files.")
         }
-        .alert("Decryption Failed", isPresented: $showPasswordRetryPrompt) {
+        .alert("Decryption Failed - Try Different Password", isPresented: $showPasswordRetryPrompt) {
             SecureField("Password", text: $password)
-            Button("Cancel", role: .cancel) { }
+            Button("Cancel", role: .cancel) { 
+                password = ""
+            }
             Button("Try Again") { attemptDecryption() }
         } message: {
-            Text("All encrypted files failed to decrypt. Please try a different password.")
+            Text("All encrypted files failed to decrypt. Please try a different password or cancel to stop.")
         }
         .alert(item: $alertItem) { item in
             let title: String
@@ -230,20 +273,58 @@ struct ContentView: View {
     }
     
     // MARK: UI Helpers
-    private var decryptButton: some View {
-        Button {
-            password = ""; showPwdPrompt = true
-        } label: {
-            Label("Decrypt Encrypted File(s)", systemImage: "bolt.fill")
-                .frame(maxWidth: .infinity).padding()
+    private var actionButtons: some View {
+        HStack(spacing: 12) {
+            // Decrypt Button
+            Button {
+                password = ""; showPwdPrompt = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Decrypt Encrypted File(s)")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .padding(.horizontal, 20)
+            }
+            .disabled(!vm.hasEncrypted)
+            .buttonStyle(.plain)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(vm.hasEncrypted ? Color(red: 0.3, green: 0.6, blue: 0.7) : Color(red: 0.7, green: 0.7, blue: 0.75).opacity(0.4))
+                    .shadow(color: vm.hasEncrypted ? Color(red: 0.3, green: 0.6, blue: 0.7).opacity(0.2) : Color.clear, radius: 6, y: 3)
+            )
+            .foregroundColor(.white)
+            .scaleEffect(vm.hasEncrypted ? 1.0 : 0.98)
+            .animation(.easeInOut(duration: 0.2), value: vm.hasEncrypted)
+            
+            // Clear Files Button
+            Button {
+                vm.clearAllFiles()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Clear Files")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .padding(.horizontal, 20)
+            }
+            .disabled(!vm.hasFiles)
+            .buttonStyle(.plain)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(vm.hasFiles ? Color(red: 0.8, green: 0.4, blue: 0.4) : Color(red: 0.7, green: 0.7, blue: 0.75).opacity(0.4))
+                    .shadow(color: vm.hasFiles ? Color(red: 0.8, green: 0.4, blue: 0.4).opacity(0.2) : Color.clear, radius: 6, y: 3)
+            )
+            .foregroundColor(.white)
+            .scaleEffect(vm.hasFiles ? 1.0 : 0.98)
+            .animation(.easeInOut(duration: 0.2), value: vm.hasFiles)
         }
-        .disabled(!vm.hasEncrypted)
-        .buttonStyle(.plain)
-        .background(vm.hasEncrypted ? Color("accentTeal")
-                                    : Color("brandBlue").opacity(0.4))
-        .foregroundColor(.white)
-        .cornerRadius(10)
-        .font(.system(.title3, design: .default).weight(.semibold))
     }
     
     private func attemptDecryption() {
@@ -286,31 +367,41 @@ struct InputCardView: View {
             browseBar
         }
         .background(Color.white)
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.08), radius: 6, y: 3)
+        .cornerRadius(16)
+        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color(red: 0.9, green: 0.9, blue: 0.9), lineWidth: 1)
+        )
     }
 
     // ───────── Drag-&-Drop zone ─────────
     private var dropZone: some View {
-        VStack(spacing: 15) {
+        VStack(spacing: 18) {
             Image(systemName: "doc.on.doc")
-                .font(.system(size: 40))
-                .foregroundColor(Color("textSecondary"))
+                .font(.system(size: 48, weight: .light))
+                .foregroundColor(Color(red: 0.6, green: 0.6, blue: 0.6))
 
             Text("Drag & Drop .pdf files here")
-                .font(.headline)
-                .foregroundColor(Color("textSecondary"))
+                .font(.system(size: 17, weight: .medium))
+                .foregroundColor(Color(red: 0.5, green: 0.5, blue: 0.5))
         }
-        .frame(maxWidth: .infinity, minHeight: 150)
-        .background(Color("panelBlue"))
-        .cornerRadius(10)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(isTargeted ? Color("accentTeal")
-                                         : Color("lineLight"),
-                              style: StrokeStyle(lineWidth: 2, dash: [8]))
+        .frame(maxWidth: .infinity, minHeight: 160)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(red: 0.95, green: 0.96, blue: 0.98))
         )
-        .padding([.horizontal, .top], 15)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(
+                    isTargeted ? Color(red: 0.3, green: 0.6, blue: 0.7) : Color(red: 0.85, green: 0.85, blue: 0.85),
+                    style: StrokeStyle(lineWidth: 2, dash: isTargeted ? [] : [8, 4])
+                )
+                .animation(.easeInOut(duration: 0.2), value: isTargeted)
+        )
+        .scaleEffect(isTargeted ? 1.02 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isTargeted)
+        .padding([.horizontal, .top], 20)
 
         // ✅ FIX: drop-handler using proper file URL handling
         .onDrop(of: [UTType.fileURL], isTargeted: $isTargeted) { providers in
@@ -333,13 +424,18 @@ struct InputCardView: View {
     private var browseBar: some View {
         HStack {
             Button("Browse...") { openPanel() }
-                .padding(.horizontal, 15).padding(.vertical, 8)
-                .background(Color("accentTeal")).foregroundColor(.white)
-                .cornerRadius(8)
-                .font(.system(.body, design: .default).weight(.medium))
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color(red: 0.3, green: 0.6, blue: 0.7))
+                        .shadow(color: Color(red: 0.3, green: 0.6, blue: 0.7).opacity(0.2), radius: 4, y: 2)
+                )
+                .foregroundColor(.white)
+                .font(.system(size: 15, weight: .semibold))
             Spacer()
         }
-        .padding(15)
+        .padding(20)
     }
 
     private func openPanel() {
@@ -359,12 +455,14 @@ struct FileListView: View {
     
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 10) {
+            LazyVStack(spacing: 12) {
                 ForEach(vm.items) { item in
                     FileRow(item: item)
                         .onTapGesture { handleTap(on: item) }
+                        .animation(.easeInOut(duration: 0.2), value: item.status)
                 }
             }
+            .padding(.horizontal, 4)
         }
     }
     
@@ -387,20 +485,33 @@ struct FileRow: View {
     @ObservedObject var item: FileItem
     
     var body: some View {
-        HStack {
-            Image(systemName: "doc.text.fill").foregroundColor(Color("accentTeal"))
+        HStack(spacing: 12) {
+            Image(systemName: "doc.text.fill")
+                .font(.system(size: 20, weight: .medium))
+                .foregroundColor(Color(red: 0.3, green: 0.6, blue: 0.7))
+                .frame(width: 24, height: 24)
+            
             Text(item.url.lastPathComponent)
-                .lineLimit(1).truncationMode(.middle)
-                .font(.system(.body, design: .monospaced))
-                .foregroundColor(Color("textPrimary"))
-            Spacer(minLength: 8)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .font(.system(size: 15, weight: .medium, design: .monospaced))
+                .foregroundColor(Color(red: 0.2, green: 0.2, blue: 0.2))
+            
+            Spacer(minLength: 12)
+            
             StatusView(status: item.status)
         }
-        .padding()
-        .background(Color.white)
-        .cornerRadius(10)
-        .overlay(RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color("lineLight"), lineWidth: 1))
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.white)
+                .shadow(color: .black.opacity(0.03), radius: 6, x: 0, y: 1)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color(red: 0.9, green: 0.9, blue: 0.9), lineWidth: 1)
+        )
     }
 }
 
@@ -412,52 +523,81 @@ struct StatusView: View {
         Group {
             switch status {
             case .checking:         
-                ProgressView().scaleEffect(0.7)
+                ProgressView()
+                    .scaleEffect(0.8)
+                    .frame(width: 16, height: 16)
             case .encrypted:        
                 Text("[Encrypted]")
-                    .bold()
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color("accentRed"))
-                    .cornerRadius(6)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color(red: 0.8, green: 0.4, blue: 0.4))
+                    )
             case .notEncrypted:     
                 Text("[Not Encrypted]")
-                    .foregroundColor(Color("textSecondary"))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Color(red: 0.5, green: 0.5, blue: 0.5))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color(red: 0.5, green: 0.5, blue: 0.5).opacity(0.1))
+                    )
             case .corrupted:        
                 Text("[Corrupted]")
-                    .bold()
-                    .foregroundColor(Color("accentRed"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Color(red: 0.8, green: 0.4, blue: 0.4))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color(red: 0.8, green: 0.4, blue: 0.4).opacity(0.1))
+                    )
             case .decrypted:        
                 Text("[Decryption Succeeded]")
-                    .bold()
-                    .foregroundColor(Color("accentTeal"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Color(red: 0.3, green: 0.6, blue: 0.7))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color(red: 0.3, green: 0.6, blue: 0.7).opacity(0.15))
+                    )
             case .decryptionFailed: 
                 Text("[Decryption Failed]")
-                    .bold()
-                    .foregroundColor(Color("accentRed"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Color(red: 0.8, green: 0.4, blue: 0.4))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color(red: 0.8, green: 0.4, blue: 0.4).opacity(0.1))
+                    )
             }
         }
-        .font(.caption)
-        .transition(.opacity)
+        .transition(.opacity.combined(with: .scale))
     }
 }
 
 // footer
 struct FooterView: View {
     var body: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 6) {
             Text("Released by Marc Mandel under the MIT license at github.com/LegalMarc/Marcrypt")
-                .font(.callout)
-                .foregroundColor(Color("textSecondary"))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(Color(red: 0.6, green: 0.6, blue: 0.6))
                 .lineLimit(1)
                 .truncationMode(.tail)
             Text("Got bugs? Message me at linkedin.com/in/marcmandel/")
-                .font(.callout)
-                .foregroundColor(Color("textSecondary"))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(Color(red: 0.6, green: 0.6, blue: 0.6))
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
         .multilineTextAlignment(.center)
+        .padding(.top, 8)
     }
 }
