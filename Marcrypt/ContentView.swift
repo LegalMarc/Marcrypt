@@ -21,7 +21,7 @@ struct CustomColors {
     static let appBackground = Color(NSColor(calibratedHue: 0.58, saturation: 0.04, brightness: 0.98, alpha: 1.0)) // Very light, slightly cool off-white/gray
     
     // C - Background for input areas and primary cards
-    static let contentBackground = Color(NSColor(calibratedHue: 0.58, saturation: 0.07, brightness: 0.93, alpha: 1.0)) // Light muted teal-ish gray for cards/inputs
+    static let contentBackground = Color(NSColor(calibratedHue: 0.58, saturation: 0.07, brightness: 0.93, alpha: 1.0)) // Light muted teal-ish gray for drop zones
 
     // B - Color for primary action buttons, links, and highlights
     static let accentColor = Color(NSColor(calibratedHue: 0.53, saturation: 0.60, brightness: 0.68, alpha: 1.0)) // Soothing teal
@@ -251,10 +251,13 @@ struct ContentView: View {
     @State private var showPwdPrompt = false
     @State private var showPasswordRetryPrompt = false
     @State private var alertItem: FileItem?
+    @State private var isTargeted = false
     
     var body: some View {
         VStack(spacing: 24) {
-            InputCardView(vm: vm)
+            // Drop zone directly in main layout
+            dropZone
+            
             FileListView(vm: vm, alertItem: $alertItem)
             Spacer()
             actionButtons
@@ -307,33 +310,133 @@ struct ContentView: View {
     }
     
     // MARK: UI Helpers
+    private var dropZone: some View {
+        VStack(spacing: 0) {
+            // Drop area with contentBackground
+            VStack(spacing: 18) {
+                Image(systemName: "doc.on.doc")
+                    .font(.system(size: 48, weight: .light))
+                    .foregroundColor(CustomColors.secondaryText)
+
+                Text("Drag & Drop .pdf files here")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundColor(CustomColors.secondaryText)
+            }
+            .frame(maxWidth: .infinity, minHeight: 160)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(CustomColors.contentBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(
+                        isTargeted ? CustomColors.accentColor : CustomColors.subtleBorder.opacity(0.2),
+                        style: StrokeStyle(lineWidth: 2.5, dash: isTargeted ? [] : [8, 4])
+                    )
+                    .animation(.easeInOut(duration: 0.2), value: isTargeted)
+            )
+            .scaleEffect(isTargeted ? 1.02 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isTargeted)
+            .padding([.horizontal, .top], 20)
+            .onDrop(of: [UTType.fileURL], isTargeted: $isTargeted) { providers in
+                for provider in providers {
+                    if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
+                            if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
+                                DispatchQueue.main.async {
+                                    vm.add(urls: [url])
+                                }
+                            }
+                        }
+                    }
+                }
+                return true
+            }
+
+            // Browse button bar
+            HStack {
+                Button(action: { openPanel() }) {
+                    Text("Browse...")
+                        .font(.system(size: 15, weight: .semibold))
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                }
+                .tint(CustomColors.accentColor)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                Spacer()
+            }
+            .padding(20)
+        }
+        .background(CustomColors.cardBackground)
+        .cornerRadius(16)
+        .shadow(color: CustomColors.shadow, radius: 8, x: 0, y: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(CustomColors.subtleBorder.opacity(0.3), lineWidth: 1)
+        )
+    }
+    
+    private func openPanel() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [UTType.pdf]
+        if panel.runModal() == .OK {
+            vm.add(urls: panel.urls)
+        }
+    }
+    
     private var actionButtons: some View {
         HStack(spacing: 12) {
-            // Decrypt Button (Addresses point B style for primary actions)
+            // Decrypt Button
             Button(action: {
                 password = ""; showPwdPrompt = true
             }) {
-                Label("Decrypt File(s)", systemImage: "bolt.fill")
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
+                HStack(spacing: 8) {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Decrypt File(s)")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .padding(.horizontal, 20)
+                .foregroundColor(.white)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(vm.hasEncrypted ? CustomColors.accentColor : Color(red: 0.7, green: 0.7, blue: 0.75).opacity(0.4))
+                        .shadow(color: vm.hasEncrypted ? CustomColors.accentColor.opacity(0.2) : Color.clear, radius: 6, y: 3)
+                )
             }
-            .buttonStyle(.borderedProminent)
-            .tint(CustomColors.accentColor)
-            .controlSize(.large)
             .disabled(!vm.hasEncrypted)
+            .buttonStyle(.plain)
+            .scaleEffect(vm.hasEncrypted ? 1.0 : 0.98)
+            .animation(.easeInOut(duration: 0.2), value: vm.hasEncrypted)
 
             // Clear Files Button
             Button(action: {
                 vm.clearAllFiles()
             }) {
-                Label("Clear Files", systemImage: "trash.fill")
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
+                HStack(spacing: 8) {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Clear Files")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .padding(.horizontal, 20)
+                .foregroundColor(.white)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(vm.hasFiles ? CustomColors.destructiveColor : Color(red: 0.7, green: 0.7, blue: 0.75).opacity(0.4))
+                        .shadow(color: vm.hasFiles ? CustomColors.destructiveColor.opacity(0.2) : Color.clear, radius: 6, y: 3)
+                )
             }
-            .buttonStyle(.borderedProminent)
-            .tint(CustomColors.destructiveColor)
-            .controlSize(.large)
             .disabled(!vm.hasFiles)
+            .buttonStyle(.plain)
+            .scaleEffect(vm.hasFiles ? 1.0 : 0.98)
+            .animation(.easeInOut(duration: 0.2), value: vm.hasFiles)
         }
     }
     
@@ -373,93 +476,6 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Input Card
-// MARK: - Input Card (fixed async errors)
-struct InputCardView: View {
-    @ObservedObject var vm: FileViewModel
-    @State private var isTargeted = false
-
-    var body: some View {
-        VStack(spacing: 0) {
-            dropZone
-            browseBar
-        }
-        .background(CustomColors.contentBackground) // Use the correct background
-        .cornerRadius(16)
-        .shadow(color: CustomColors.shadow, radius: 8, x: 0, y: 2)
-        // The explicit .overlay stroke is removed to match Marcompare's cleaner look
-    }
-
-    // ───────── Drag-&-Drop zone ─────────
-    private var dropZone: some View {
-        VStack(spacing: 18) {
-            Image(systemName: "doc.on.doc")
-                .font(.system(size: 48, weight: .light))
-                .foregroundColor(Color(red: 0.6, green: 0.6, blue: 0.6))
-
-            Text("Drag & Drop .pdf files here")
-                .font(.system(size: 17, weight: .medium))
-                .foregroundColor(Color(red: 0.5, green: 0.5, blue: 0.5))
-        }
-        .frame(maxWidth: .infinity, minHeight: 160)
-        // REMOVE the entire .background(...) modifier from the dropZone VStack.
-        // It will now inherit the CustomColors.contentBackground from its parent.
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(
-                    isTargeted ? CustomColors.accentColor : CustomColors.subtleBorder.opacity(0.5), // Use palette colors
-                    style: StrokeStyle(lineWidth: 2.5, dash: isTargeted ? [] : [8, 4])
-                )
-                .animation(.easeInOut(duration: 0.2), value: isTargeted)
-        )
-        .scaleEffect(isTargeted ? 1.02 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isTargeted)
-        .padding([.horizontal, .top], 20)
-
-        // ✅ FIX: drop-handler using proper file URL handling
-        .onDrop(of: [UTType.fileURL], isTargeted: $isTargeted) { providers in
-            for provider in providers {
-                if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-                    provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
-                        if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
-                            DispatchQueue.main.async {
-                                vm.add(urls: [url])
-                            }
-                        }
-                    }
-                }
-            }
-            return true
-        }
-    }
-
-    // ───────── Browse… button ─────────
-    private var browseBar: some View {
-        HStack {
-            Button(action: { openPanel() }) {
-                Text("Browse...")
-                    .font(.system(size: 15, weight: .semibold))
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-            }
-            .tint(CustomColors.accentColor) // Use tint for coloring
-            .buttonStyle(.borderedProminent) // Use a standard, modern style
-            .controlSize(.large) // For better padding
-            Spacer()
-        }
-        .padding(20)
-    }
-
-    private func openPanel() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = true
-        panel.allowedContentTypes = [UTType.pdf]
-        if panel.runModal() == .OK {
-            vm.add(urls: panel.urls)
-        }
-    }
-}
-
 // MARK: - File List
 struct FileListView: View {
     @ObservedObject var vm: FileViewModel
@@ -476,6 +492,7 @@ struct FileListView: View {
             }
             .padding(.horizontal, 4)
         }
+        .scrollContentBackground(.hidden) // <-- ADD THIS MODIFIER
     }
     
     private func handleTap(on item: FileItem) {
