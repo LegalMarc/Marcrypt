@@ -250,7 +250,7 @@ struct WindowBackgroundView: NSViewRepresentable {
         let view = NSView()
         DispatchQueue.main.async {
             if let window = view.window {
-                window.backgroundColor = NSColor(CustomColors.cardBackground)
+                window.backgroundColor = NSColor(CustomColors.appBackground)
             }
         }
         return view
@@ -258,7 +258,7 @@ struct WindowBackgroundView: NSViewRepresentable {
     
     func updateNSView(_ nsView: NSView, context: Context) {
         if let window = nsView.window {
-            window.backgroundColor = NSColor(CustomColors.cardBackground)
+            window.backgroundColor = NSColor(CustomColors.appBackground)
         }
     }
 }
@@ -284,7 +284,7 @@ struct ContentView: View {
         }
         .padding(24)
         .frame(width: 720, height: 650)
-        .background(CustomColors.cardBackground.ignoresSafeArea())
+        .background(CustomColors.appBackground.ignoresSafeArea())
         .background(WindowBackgroundView().opacity(0))
         .alert("Enter PDF Password", isPresented: $showPwdPrompt) {
             SecureField("Password", text: $password)
