@@ -278,12 +278,13 @@ struct ContentView: View {
             dropZone
             
             FileListView(vm: vm, alertItem: $alertItem)
-            Spacer()
+                .frame(maxHeight: .infinity) // Allow FileListView to expand vertically
+            
             actionButtons
             FooterView()
         }
         .padding(24)
-        .frame(width: 720, height: 650)
+        .frame(minWidth: 720, minHeight: 620) // Set minimum size to show 3.5 file rows
         .background(CustomColors.appBackground.ignoresSafeArea())
         .background(WindowBackgroundView().opacity(0))
         .alert("Enter PDF Password", isPresented: $showPwdPrompt) {

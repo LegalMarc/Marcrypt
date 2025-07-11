@@ -8,6 +8,7 @@ struct MarcryptApp: App {
         WindowGroup {
             ContentView()
         }
+        .windowResizability(.contentMinSize) // Allow user resizing beyond minimum content size
         .commands {
             CommandGroup(replacing: .appInfo) {
                 Button("About Marcrypt") {
@@ -21,6 +22,6 @@ struct MarcryptApp: App {
         Window("About Marcrypt", id: "about") {
             AboutView()
         }
-        .windowResizability(.contentSize) // Makes the window non-resizable
+        .windowResizability(.contentSize) // Makes the About window non-resizable
     }
 } 
