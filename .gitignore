@@ -1,0 +1,68 @@
+# Xcode
+DerivedData/
+*.xcworkspace
+*.xcuserdata
+*.xccheckout
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/
+
+# Swift Package Manager
+.build/
+Packages/
+Package.resolved
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Archives
+*.xcarchive
+
+# Logs
+*.log
+
+# macOS files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE Helpers
+*.swp
+*.swo
+.idea/
+*.orig
+
+# Temporary files
+*.tmp
+*.bak
+
+# Output bundles
+*.ipa
+*.app
+*.dSYM.zip
+*.dSYM
+
+# Crash reports
+*.crash
+
+# Xcode Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# Unit test coverage
+*.gcda
+
+# SwiftPM automatic indexing
+.swiftpm/
+
+# Flutter (if ever integrated)
+.flutter-plugins
+.flutter-plugins-dependencies
