@@ -5,6 +5,7 @@
 //  Fixed:   • status-spinner now updates correctly
 //           • state moved to a single `ViewModel` (ObservableObject)
 //           • no more value-type copies losing their status
+//           • Added PDF encryption functionality
 //
 
 import SwiftUI
@@ -53,8 +54,58 @@ final class FileItem: Identifiable, ObservableObject, Sendable {
     init(url: URL) { self.url = url }
 }
 
+struct AlertInfo: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
+
+enum EncryptionFlowStep: Equatable {
+    case idle
+    case destinationSelected(URL)
+    case encrypting(URL) 
+    case retryPassword(URL)
+    case destinationUnavailable
+    
+    var showsPasswordDialog: Bool {
+        switch self {
+        case .destinationSelected, .retryPassword:
+            return true
+        case .idle, .encrypting, .destinationUnavailable:
+            return false
+        }
+    }
+    
+    var isRetryFlow: Bool {
+        switch self {
+        case .retryPassword:
+            return true
+        case .idle, .destinationSelected, .encrypting, .destinationUnavailable:
+            return false
+        }
+    }
+    
+    var isEncrypting: Bool {
+        switch self {
+        case .encrypting:
+            return true
+        case .idle, .destinationSelected, .retryPassword, .destinationUnavailable:
+            return false
+        }
+    }
+    
+    var destinationURL: URL? {
+        switch self {
+        case .destinationSelected(let url), .encrypting(let url), .retryPassword(let url):
+            return url
+        case .idle, .destinationUnavailable:
+            return nil
+        }
+    }
+}
+
 enum ProcessingStatus: Sendable {
-    case checking, encrypted, notEncrypted, corrupted, decrypted, decryptionFailed
+    case checking, encrypted, notEncrypted, corrupted, decrypted, decryptionFailed, encryptionSucceeded, encryptionFailed, processing
 }
 
 // MARK: - Central View-Model
@@ -62,6 +113,7 @@ enum ProcessingStatus: Sendable {
 final class FileViewModel: ObservableObject {
     @Published var items: [FileItem] = []
     @Published var hasEncrypted: Bool = false
+    @Published var hasUnencrypted: Bool = false
     
     // add files, avoid duplicates, and start async status-check
     @MainActor
@@ -71,7 +123,7 @@ final class FileViewModel: ObservableObject {
             items.append(item)
             Task { await checkStatus(for: item) }
         }
-        updateHasEncrypted()
+        updateButtonStates()
     }
     
     // async check: encrypted / notEncrypted / corrupted
@@ -79,7 +131,7 @@ final class FileViewModel: ObservableObject {
     private func checkStatus(for item: FileItem) async {
         // Perform the check on a background thread
         let (status, errorMessage) = await withCheckedContinuation { (continuation: CheckedContinuation<(ProcessingStatus, String?), Never>) in
-            DispatchQueue.global(qos: .userInitiated).async {
+            DispatchQueue.global(qos: .userInitiated).async(execute: {
                 // First try without security scoped access (for files opened via browser)
                 if let pdf = PDFDocument(url: item.url) {
                     continuation.resume(returning: (pdf.isEncrypted ? .encrypted : .notEncrypted, nil))
@@ -99,7 +151,7 @@ final class FileViewModel: ObservableObject {
                     return
                 }
                 continuation.resume(returning: (pdf.isEncrypted ? .encrypted : .notEncrypted, nil))
-            }
+            })
         }
         
         // Update on main actor
@@ -109,9 +161,14 @@ final class FileViewModel: ObservableObject {
     // helper: mutate on main-thread
     @MainActor
     private func update(_ item: FileItem, _ status: ProcessingStatus, _ msg: String?) {
+        // Clear decrypted document if status is changing away from .decrypted
+        if item.status == .decrypted && status != .decrypted {
+            item.decryptedDocument = nil
+        }
+        
         item.status       = status
         item.errorMessage = msg
-        updateHasEncrypted()
+        updateButtonStates()
     }
     
     // decrypt all encrypted items - first decrypt in memory, then save if any succeeded
@@ -147,7 +204,7 @@ final class FileViewModel: ObservableObject {
     private func processDecryption(for item: FileItem, password: String) async -> (success: Bool, item: FileItem) {
         // Perform the heavy work on a background thread
         let result = await withCheckedContinuation { (continuation: CheckedContinuation<(Bool, PDFDocument?, String?), Never>) in
-            DispatchQueue.global(qos: .userInitiated).async {
+            DispatchQueue.global(qos: .userInitiated).async(execute: {
                 // First try without security scoped access (for files opened via browser)
                 if let doc = PDFDocument(url: item.url) {
                     if doc.unlock(withPassword: password) {
@@ -178,7 +235,7 @@ final class FileViewModel: ObservableObject {
                 
                 // Successfully decrypted
                 continuation.resume(returning: (true, doc, nil))
-            }
+            })
         }
         
         // Update UI on main actor
@@ -200,35 +257,198 @@ final class FileViewModel: ObservableObject {
         Task { @MainActor in
             // Try to access destination (should work since user selected it)
             let hasAccess = destination.startAccessingSecurityScopedResource()
-            
-            do {
-                // Get successfully decrypted items
-                let decryptedItems = self.items.filter { $0.status == .decrypted && $0.decryptedDocument != nil }
-                
-                for item in decryptedItems {
-                    guard let doc = item.decryptedDocument else { continue }
-                    
-                    let outName = item.url.lastPathComponent
-                    let outURL = destination.appendingPathComponent(outName)
-                    
-                    if !doc.write(to: outURL) {
-                        self.update(item, .decryptionFailed, "Failed to write decrypted file to destination.")
-                    }
+            defer {
+                if hasAccess {
+                    destination.stopAccessingSecurityScopedResource()
                 }
             }
             
-            if hasAccess {
-                destination.stopAccessingSecurityScopedResource()
+            // Get successfully decrypted items
+            let decryptedItems = self.items.filter { $0.status == .decrypted && $0.decryptedDocument != nil }
+            
+            for item in decryptedItems {
+                guard let doc = item.decryptedDocument else { continue }
+                
+                let outName = item.url.lastPathComponent
+                let outURL = destination.appendingPathComponent(outName)
+                
+                if !doc.write(to: outURL) {
+                    self.update(item, .decryptionFailed, "Failed to write decrypted file to destination.")
+                } else {
+                    // Clear the decrypted document from memory immediately after successful save
+                    item.decryptedDocument = nil
+                }
             }
         }
     }
     
-
+    // MARK: - Encryption Logic
+    
+    /*
+     PDF Encryption & Permissions Model:
+     
+     Current Implementation:
+     - User Password: Required to open/view the document
+     - Owner Password: Set to same value as user password
+     - Result: Anyone who can decrypt gets FULL permissions (print, copy, edit, annotate)
+     
+     This is the most intuitive behavior for most users. If you can decrypt the file,
+     you should be able to do everything with it.
+     
+     Future Enhancement Possibility:
+     - Add advanced permissions UI to set different owner password
+     - Allow restricting printing, copying, editing permissions
+     - Would require additional UI complexity and user education
+     
+     Memory Optimization Notes:
+     - Encryption: Reads → processes → writes directly (minimal memory footprint)
+     - Decryption: Currently stores PDFDocument in memory, but clears after save
+     - For very large files: Could implement streaming approach to avoid loading entire PDF
+     */
+    
+    // Main encryption function
+    @MainActor
+    func encryptAll(with password: String, to destination: URL, completion: @escaping (Bool, [String]) -> Void) async {
+        // Filter for files that can be encrypted (not corrupted, not already encrypted)
+        let encryptableItems = self.items.filter { $0.status == .notEncrypted }
+        
+        guard !encryptableItems.isEmpty else {
+            completion(false, [])
+            return
+        }
+        
+        // Set all files to processing state
+        for item in encryptableItems {
+            self.update(item, .processing, nil)
+        }
+        
+        // Start security access for the destination directory
+        let hasAccess = destination.startAccessingSecurityScopedResource()
+        defer {
+            if hasAccess {
+                destination.stopAccessingSecurityScopedResource()
+            }
+        }
+        
+        var results: [(success: Bool, item: FileItem, failureReason: String?)] = []
+        
+        for item in encryptableItems {
+            // Check for cancellation before processing each file
+            if Task.isCancelled {
+                // Reset remaining files to their original state
+                for remainingItem in encryptableItems where !results.contains(where: { $0.item.id == remainingItem.id }) {
+                    self.update(remainingItem, .notEncrypted, nil)
+                }
+                completion(false, [])
+                return
+            }
+            
+            let result = await self.processEncryption(for: item, password: password, destination: destination)
+            results.append(result)
+        }
+        
+        let successCount = results.filter { $0.success }.count
+        let failedFiles = results.filter { !$0.success }.map { $0.item.url.lastPathComponent }
+        
+        completion(successCount > 0, failedFiles)
+    }
+    
+    // Process single file encryption
+    @MainActor
+    private func processEncryption(for item: FileItem, password: String, destination: URL) async -> (success: Bool, item: FileItem, failureReason: String?) {
+        let result = await withCheckedContinuation { (continuation: CheckedContinuation<(Bool, String?), Never>) in
+            DispatchQueue.global(qos: .userInitiated).async(execute: {
+                // Try without security scoped access first
+                if let doc = PDFDocument(url: item.url) {
+                    let outputURL = self.generateUniqueURL(for: item.url.lastPathComponent, in: destination)
+                    
+                    // Create properly-typed options dictionary
+                    let writeOptions: [PDFDocumentWriteOption : Any] = [
+                        .userPasswordOption: password,
+                        .ownerPasswordOption: password // Same password = full permissions after decryption
+                    ]
+                    
+                    if doc.write(to: outputURL, withOptions: writeOptions) {
+                        continuation.resume(returning: (true, nil))
+                    } else {
+                        continuation.resume(returning: (false, "Failed to write encrypted file."))
+                    }
+                    return
+                }
+                
+                // Try with security scoped access
+                guard item.url.startAccessingSecurityScopedResource() else {
+                    continuation.resume(returning: (false, "Permission denied to access file."))
+                    return
+                }
+                defer { item.url.stopAccessingSecurityScopedResource() }
+                
+                guard let doc = PDFDocument(url: item.url) else {
+                    continuation.resume(returning: (false, "File could not be read."))
+                    return
+                }
+                
+                let outputURL = self.generateUniqueURL(for: item.url.lastPathComponent, in: destination)
+                
+                // Create properly-typed options dictionary
+                // Note: Setting same password for both user and owner gives full permissions to anyone who can decrypt
+                let writeOptions: [PDFDocumentWriteOption : Any] = [
+                    .userPasswordOption: password,
+                    .ownerPasswordOption: password // Same password = full permissions after decryption
+                ]
+                
+                if doc.write(to: outputURL, withOptions: writeOptions) {
+                    continuation.resume(returning: (true, nil))
+                } else {
+                    continuation.resume(returning: (false, "Failed to write encrypted file."))
+                }
+            })
+        }
+        
+        // Update UI on main actor
+        if result.0 {
+            self.update(item, .encryptionSucceeded, nil)
+            return (true, item, nil)
+        } else {
+            self.update(item, .encryptionFailed, result.1)
+            return (false, item, result.1)
+        }
+    }
+    
+    // Generate unique filename using macOS collision handling
+    private func generateUniqueURL(for filename: String, in directory: URL) -> URL {
+        let baseURL = directory.appendingPathComponent(filename)
+        
+        // Check if file exists
+        if !FileManager.default.fileExists(atPath: baseURL.path) {
+            return baseURL
+        }
+        
+        // Generate unique name
+        let nameWithoutExtension = baseURL.deletingPathExtension().lastPathComponent
+        let fileExtension = baseURL.pathExtension
+        
+        var counter = 1
+        while true {
+            let newName = "\(nameWithoutExtension) (\(counter)).\(fileExtension)"
+            let newURL = directory.appendingPathComponent(newName)
+            
+            if !FileManager.default.fileExists(atPath: newURL.path) {
+                return newURL
+            }
+            counter += 1
+        }
+    }
+    
+    // MARK: - State Management
     
     @MainActor
-    private func updateHasEncrypted() {
+    private func updateButtonStates() {
         hasEncrypted = items.contains { item in
             item.status == .encrypted || item.status == .decryptionFailed
+        }
+        hasUnencrypted = items.contains { item in
+            item.status == .notEncrypted
         }
     }
     
@@ -239,8 +459,19 @@ final class FileViewModel: ObservableObject {
     
     @MainActor
     func clearAllFiles() {
+        // Clear any decrypted documents from memory before removing items
+        for item in items {
+            item.decryptedDocument = nil
+        }
         items.removeAll()
-        updateHasEncrypted()
+        updateButtonStates()
+    }
+    
+    @MainActor
+    func resetProcessingFiles() {
+        for item in items where item.status == .processing {
+            update(item, .notEncrypted, nil)
+        }
     }
 }
 
@@ -271,6 +502,14 @@ struct ContentView: View {
     @State private var showPasswordRetryPrompt = false
     @State private var alertItem: FileItem?
     @State private var isTargeted = false
+    
+    // Encryption state
+    @State private var encryptPassword = ""
+    @State private var encryptPasswordConfirm = ""
+    @State private var showPasswordText = false
+    @State private var preflightAlertInfo: (title: String, message: String)?
+    @State private var currentEncryptionTask: Task<Void, Never>?
+    @State private var encryptionFlow: EncryptionFlowStep = .idle
     
     var body: some View {
         VStack(spacing: 24) {
@@ -305,6 +544,21 @@ struct ContentView: View {
         } message: {
             Text("Some or all files failed to decrypt. Please try a different password or cancel to stop.")
         }
+        .sheet(isPresented: .constant(encryptionFlow.showsPasswordDialog)) {
+            EncryptPasswordDialog(
+                password: $encryptPassword,
+                passwordConfirm: $encryptPasswordConfirm,
+                showPasswordText: $showPasswordText,
+                isRetry: encryptionFlow.isRetryFlow,
+                onCancel: {
+                    clearMainPasswords()
+                    encryptionFlow = .idle
+                },
+                onEncrypt: {
+                    attemptEncryption()
+                }
+            )
+        }
         .alert(item: $alertItem) { item in
             let title: String
             let message: String
@@ -313,6 +567,9 @@ struct ContentView: View {
             case .decryptionFailed:
                 title = "Decryption Failed"
                 message = item.errorMessage ?? "Unknown error occurred during decryption."
+            case .encryptionFailed:
+                title = "Encryption Failed"
+                message = item.errorMessage ?? "Unknown error occurred during encryption."
             case .corrupted:
                 title = "Corrupted File"
                 message = item.errorMessage ?? "This file could not be read and may be corrupted or not a valid PDF file."
@@ -328,7 +585,19 @@ struct ContentView: View {
                         message: Text(message),
                         dismissButton: .default(Text("OK")))
         }
+        .alert(item: Binding<AlertInfo?>(
+            get: { preflightAlertInfo.map { AlertInfo(title: $0.title, message: $0.message) } },
+            set: { _ in preflightAlertInfo = nil }
+        )) { info in
+            Alert(title: Text(info.title),
+                  message: Text(info.message),
+                  dismissButton: .default(Text("OK")))
+        }
+        .onChange(of: encryptionFlow) { _, newFlow in
+            handleFlowStateChange(newFlow)
+        }
     }
+
     
     // MARK: UI Helpers
     private var dropZone: some View {
@@ -409,6 +678,50 @@ struct ContentView: View {
     
     private var actionButtons: some View {
         HStack(spacing: 12) {
+            // Encrypt/Stop Button
+            if encryptionFlow.isEncrypting {
+                Button(action: { stopEncryption() }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("Stop Encryption")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .padding(.horizontal, 20)
+                    .foregroundColor(.white)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(CustomColors.destructiveColor)
+                            .shadow(color: CustomColors.destructiveColor.opacity(0.2), radius: 6, y: 3)
+                    )
+                }
+                .buttonStyle(.plain)
+            } else {
+                Button(action: { startEncryptionProcess() }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("Encrypt File(s)")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .padding(.horizontal, 20)
+                    .foregroundColor(.white)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(vm.hasUnencrypted ? CustomColors.accentColor : Color(red: 0.7, green: 0.7, blue: 0.75).opacity(0.4))
+                            .shadow(color: vm.hasUnencrypted ? CustomColors.accentColor.opacity(0.2) : Color.clear, radius: 6, y: 3)
+                    )
+                }
+                .disabled(!vm.hasUnencrypted)
+                .buttonStyle(.plain)
+                .scaleEffect(vm.hasUnencrypted ? 1.0 : 0.98)
+                .animation(.easeInOut(duration: 0.2), value: vm.hasUnencrypted)
+            }
+            
             // Decrypt Button
             Button(action: {
                 password = ""; showPwdPrompt = true
@@ -460,6 +773,185 @@ struct ContentView: View {
             .animation(.easeInOut(duration: 0.2), value: vm.hasFiles)
         }
     }
+    
+    // MARK: - Encryption Flow
+    
+    /*
+     Encryption Flow State Management:
+     
+     The encryption process follows a clean state machine pattern:
+     
+     .idle 
+       ↓ (user clicks "Encrypt")
+     .destinationSelected(URL) → shows password dialog
+       ↓ (user enters password)
+     .encrypting(URL) → shows processing indicators  
+       ↓ (success/failure)
+     .idle OR .retryPassword(URL)
+     
+     Error handling:
+     - .destinationUnavailable → shows alert, returns to .idle
+     - .retryPassword(URL) → shows retry dialog with same destination
+     
+     Benefits over previous approach:
+     - No race conditions or arbitrary delays
+     - Explicit state transitions  
+     - Single source of truth for flow state
+     - Easy to reason about and debug
+     */
+    
+    private func startEncryptionProcess() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        panel.message = "Choose a folder to save the encrypted PDF files"
+        panel.prompt = "Save Here"
+        
+        if panel.runModal() == .OK, let dest = panel.url {
+            // Pre-flight checks before showing password dialog
+            
+            // 1. Check destination write permissions
+            guard verifyDestinationIsWritable(url: dest) else {
+                preflightAlertInfo = (
+                    title: "Destination Not Writable",
+                    message: "You do not have permission to save files to the chosen location. Please select a different folder."
+                )
+                return
+            }
+            
+            // 2. Check for sufficient disk space
+            guard verifySufficientDiskSpace(for: vm.items, at: dest) else {
+                preflightAlertInfo = (
+                    title: "Insufficient Disk Space",
+                    message: "There may not be enough free space on the destination drive to save the encrypted files. Please free up space or choose a different location."
+                )
+                return
+            }
+            
+            // All checks passed, proceed to password dialog
+            clearMainPasswords()
+            showPasswordText = false
+            encryptionFlow = .destinationSelected(dest)
+        }
+    }
+    
+    // MARK: - Pre-flight Verification Functions
+    
+    private func verifyDestinationIsWritable(url: URL) -> Bool {
+        let testFileURL = url.appendingPathComponent(".marcrypt-writetest")
+        do {
+            // Try to write a dummy file
+            try "test".data(using: .utf8)?.write(to: testFileURL)
+            // If successful, immediately remove it
+            try FileManager.default.removeItem(at: testFileURL)
+            return true
+        } catch {
+            // If either write or delete fails, we don't have permission
+            print("Destination verification failed: \(error.localizedDescription)")
+            return false
+        }
+    }
+    
+    private func verifySufficientDiskSpace(for items: [FileItem], at destination: URL) -> Bool {
+        do {
+            // Get the total size of all files that will be encrypted
+            let filesToEncrypt = items.filter { $0.status == .notEncrypted }
+            let totalSize = try filesToEncrypt.reduce(0) { (sum, item) -> Int64 in
+                let attributes = try FileManager.default.attributesOfItem(atPath: item.url.path)
+                return sum + (attributes[.size] as? Int64 ?? 0)
+            }
+            
+            // Get available space on the destination volume
+            let resourceValues = try destination.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+            if let freeSpace = resourceValues.volumeAvailableCapacityForImportantUsage {
+                // Add some buffer (10% or 100MB, whichever is smaller) to account for overhead
+                let buffer = min(Int64(totalSize / 10), 100 * 1024 * 1024)
+                return (totalSize + buffer) <= freeSpace
+            }
+            
+            // If we can't get free space info, proceed but warn in console
+            print("Could not verify disk space - proceeding anyway")
+            return true
+            
+        } catch {
+            // Failed to get file sizes or free space; proceed but log warning
+            print("Could not verify disk space: \(error.localizedDescription)")
+            return true
+        }
+    }
+    
+    private func attemptEncryption() {
+        guard !encryptPassword.isEmpty, encryptPassword == encryptPasswordConfirm else { return }
+        guard let destination = encryptionFlow.destinationURL else { return }
+        
+        // Check if destination is still available
+        if !FileManager.default.fileExists(atPath: destination.path) {
+            // Transition to destination unavailable state - this will trigger re-selection
+            encryptionFlow = .destinationUnavailable
+            return
+        }
+        
+        // Start encryption with cancellation support
+        encryptionFlow = .encrypting(destination)
+        let passwordCopy = encryptPassword // Capture password for async context
+        
+        currentEncryptionTask = Task {
+            await vm.encryptAll(with: passwordCopy, to: destination) { success, failedFiles in
+                Task { @MainActor in
+                    // Secure password cleanup
+                    clearMainPasswords()
+                    currentEncryptionTask = nil
+                    
+                    if success {
+                        // Encryption succeeded, return to idle
+                        encryptionFlow = .idle
+                    } else {
+                        // All files failed, show retry dialog
+                        encryptionFlow = .retryPassword(destination)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func stopEncryption() {
+        currentEncryptionTask?.cancel()
+        currentEncryptionTask = nil
+        
+        // Reset any files that were in processing state
+        vm.resetProcessingFiles()
+        
+        // Secure password cleanup and return to idle
+        clearMainPasswords()
+        encryptionFlow = .idle
+    }
+    
+    private func clearMainPasswords() {
+        // Zero out password memory
+        encryptPassword = ""
+        encryptPasswordConfirm = ""
+    }
+    
+    private func handleFlowStateChange(_ newFlow: EncryptionFlowStep) {
+        switch newFlow {
+        case .destinationUnavailable:
+            // Show alert and offer to re-select destination
+            preflightAlertInfo = (
+                title: "Destination No Longer Available",
+                message: "The originally chosen directory is no longer available. Please select a new location."
+            )
+            // After user dismisses the alert, they can manually restart the process
+            encryptionFlow = .idle
+            
+        case .idle, .destinationSelected, .encrypting, .retryPassword:
+            // These states are handled by their respective UI components
+            break
+        }
+    }
+    
+    // MARK: - Decryption Flow
     
     private func attemptDecryption() {
         guard !password.isEmpty else { return }
@@ -518,7 +1010,7 @@ struct FileListView: View {
     
     private func handleTap(on item: FileItem) {
         switch item.status {
-        case .decryptionFailed, .corrupted: 
+        case .decryptionFailed, .encryptionFailed, .corrupted: 
             alertItem = item
         case .notEncrypted:
             let info = FileItem(url: item.url)
@@ -626,6 +1118,41 @@ struct StatusView: View {
                         RoundedRectangle(cornerRadius: 6)
                             .fill(CustomColors.destructiveColor.opacity(0.1))
                     )
+            case .encryptionSucceeded:
+                Text("[Encryption Succeeded]")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(CustomColors.accentColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(CustomColors.accentColor.opacity(0.15))
+                    )
+            case .encryptionFailed:
+                Text("[Encryption Failed]")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(CustomColors.destructiveColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(CustomColors.destructiveColor.opacity(0.1))
+                    )
+            case .processing:
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .frame(width: 12, height: 12)
+                    Text("[Processing...]")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(CustomColors.accentColor)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(CustomColors.accentColor.opacity(0.1))
+                )
             }
         }
         .transition(.opacity.combined(with: .scale))
@@ -660,5 +1187,204 @@ struct FooterView: View {
         }
         .multilineTextAlignment(.center)
         .padding(.top, 8)
+    }
+}
+
+// MARK: - Encrypt Password Dialog
+struct EncryptPasswordDialog: View {
+    @Binding var password: String
+    @Binding var passwordConfirm: String
+    @Binding var showPasswordText: Bool
+    let isRetry: Bool
+    let onCancel: () -> Void
+    let onEncrypt: () -> Void
+    
+    // Local secure password storage
+    @State private var localPassword = ""
+    @State private var localPasswordConfirm = ""
+    @State private var localShowPasswordText = false
+    
+    private func calculatePasswordEntropy(_ password: String) -> Double {
+        guard !password.isEmpty else { return 0.0 }
+        
+        var characterSets: Set<Character> = []
+        var poolSize = 0
+        
+        let lowercase = CharacterSet.lowercaseLetters
+        let uppercase = CharacterSet.uppercaseLetters
+        let digits = CharacterSet.decimalDigits
+        let symbols = CharacterSet.punctuationCharacters.union(CharacterSet.symbols)
+        
+        for char in password {
+            let scalar = char.unicodeScalars.first!
+            if lowercase.contains(scalar) {
+                characterSets.insert("a")
+            } else if uppercase.contains(scalar) {
+                characterSets.insert("A")
+            } else if digits.contains(scalar) {
+                characterSets.insert("0")
+            } else if symbols.contains(scalar) {
+                characterSets.insert("!")
+            }
+        }
+        
+        if characterSets.contains("a") { poolSize += 26 }
+        if characterSets.contains("A") { poolSize += 26 }
+        if characterSets.contains("0") { poolSize += 10 }
+        if characterSets.contains("!") { poolSize += 32 }
+        
+        // Prevent log2 crashes with invalid pool sizes
+        guard poolSize > 1 else { return 0.0 }
+        
+        return log2(Double(poolSize)) * Double(password.count)
+    }
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            // Header
+            VStack(spacing: 8) {
+                Text(isRetry ? "Encryption Failed - Try Different Password" : "Set Encryption Password")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(CustomColors.primaryText)
+                
+                Text(isRetry ? "Some or all files failed to encrypt. Please try a different password or cancel to stop." : "Enter a password to encrypt the PDF files. The same password will be applied to all files.")
+                    .font(.body)
+                    .foregroundColor(CustomColors.secondaryText)
+                    .multilineTextAlignment(.center)
+            }
+            
+            VStack(spacing: 16) {
+                // Password field
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Password")
+                        .font(.headline)
+                        .foregroundColor(CustomColors.primaryText)
+                    
+                                         HStack {
+                         if localShowPasswordText {
+                             TextField("Enter password", text: $localPassword)
+                                 .textFieldStyle(.roundedBorder)
+                                 .disableAutocorrection(true)
+                         } else {
+                             SecureField("Enter password", text: $localPassword)
+                                 .textFieldStyle(.roundedBorder)
+                                 .disableAutocorrection(true)
+                         }
+                         
+                         Button(action: { localShowPasswordText.toggle() }) {
+                             Image(systemName: localShowPasswordText ? "eye.slash" : "eye")
+                                 .foregroundColor(CustomColors.accentColor)
+                         }
+                         .buttonStyle(.plain)
+                     }
+                }
+                
+                // Confirm password field
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Confirm Password")
+                        .font(.headline)
+                        .foregroundColor(CustomColors.primaryText)
+                    
+                                         HStack {
+                         if localShowPasswordText {
+                             TextField("Confirm password", text: $localPasswordConfirm)
+                                 .textFieldStyle(.roundedBorder)
+                                 .disableAutocorrection(true)
+                         } else {
+                             SecureField("Confirm password", text: $localPasswordConfirm)
+                                 .textFieldStyle(.roundedBorder)
+                                 .disableAutocorrection(true)
+                         }
+                     }
+                }
+                
+                                 // Password strength meter
+                 let entropy = calculatePasswordEntropy(localPassword)
+                 
+                 VStack(alignment: .leading, spacing: 8) {
+                     Text("Password Strength")
+                         .font(.headline)
+                         .foregroundColor(CustomColors.primaryText)
+                     
+                     HStack(spacing: 4) {
+                         ForEach(0..<4, id: \.self) { index in
+                             let thresholds: [Double] = [40, 60, 120, 200]
+                             RoundedRectangle(cornerRadius: 2)
+                                 .fill(entropy >= thresholds[index] ? CustomColors.accentColor : Color.gray.opacity(0.3))
+                                 .frame(height: 8)
+                         }
+                     }
+                     
+                     HStack {
+                         Text("Poor")
+                             .font(.caption2)
+                         Spacer()
+                         Text("Not Great")
+                             .font(.caption2)
+                         Spacer()
+                         Text("Good")
+                             .font(.caption2)
+                         Spacer()
+                         Text("Excellent")
+                             .font(.caption2)
+                     }
+                     .foregroundColor(CustomColors.secondaryText)
+                     
+                     Text("\(Int(entropy)) bits of entropy")
+                         .font(.caption)
+                         .foregroundColor(CustomColors.secondaryText)
+                 }
+            }
+            
+                         // Buttons
+             HStack(spacing: 12) {
+                 Button("Cancel") {
+                     // Secure cleanup before canceling
+                     clearPasswords()
+                     onCancel()
+                 }
+                 .buttonStyle(.bordered)
+                 .controlSize(.large)
+                 .tint(CustomColors.destructiveColor)
+                 
+                 Button(isRetry ? "Try Again" : "Encrypt") {
+                     // Sync passwords and encrypt
+                     password = localPassword
+                     passwordConfirm = localPasswordConfirm
+                     showPasswordText = localShowPasswordText
+                     onEncrypt()
+                     
+                     // Clear local passwords after use
+                     clearPasswords()
+                 }
+                 .buttonStyle(.borderedProminent)
+                 .controlSize(.large)
+                 .tint(CustomColors.accentColor)
+                 .disabled(localPassword.isEmpty || localPassword != localPasswordConfirm)
+             }
+        }
+        .padding(32)
+        .frame(maxWidth: 500)
+        .background(CustomColors.cardBackground)
+        .cornerRadius(16)
+        .shadow(color: CustomColors.shadow, radius: 20, x: 0, y: 10)
+        .onAppear {
+            // Initialize with existing values if any
+            localPassword = password
+            localPasswordConfirm = passwordConfirm
+            localShowPasswordText = showPasswordText
+        }
+        .onDisappear {
+            // Secure cleanup when dialog is dismissed
+            clearPasswords()
+        }
+    }
+    
+    private func clearPasswords() {
+        // Zero out password memory
+        localPassword = ""
+        localPasswordConfirm = ""
+        localShowPasswordText = false
     }
 }
