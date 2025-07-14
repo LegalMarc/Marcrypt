@@ -44,7 +44,7 @@ struct CustomColors {
 
 // MARK: - Data Models
 @MainActor
-final class FileItem: Identifiable, ObservableObject, Sendable {
+final class FileItem: Identifiable, ObservableObject {
     let id   = UUID()
     let url  : URL
     @Published var status: ProcessingStatus = .checking
@@ -65,13 +65,12 @@ enum EncryptionFlowStep: Equatable {
     case passwordEntry
     case encrypting(URL, password: String) 
     case retryPassword(URL)
-    case showingDestinationUnavailableAlert
     
     var showsPasswordDialog: Bool {
         switch self {
         case .passwordEntry, .retryPassword:
             return true
-        case .idle, .encrypting, .showingDestinationUnavailableAlert:
+        case .idle, .encrypting:
             return false
         }
     }
@@ -80,7 +79,7 @@ enum EncryptionFlowStep: Equatable {
         switch self {
         case .retryPassword:
             return true
-        case .idle, .passwordEntry, .encrypting, .showingDestinationUnavailableAlert:
+        case .idle, .passwordEntry, .encrypting:
             return false
         }
     }
@@ -89,7 +88,7 @@ enum EncryptionFlowStep: Equatable {
         switch self {
         case .encrypting:
             return true
-        case .idle, .passwordEntry, .retryPassword, .showingDestinationUnavailableAlert:
+        case .idle, .passwordEntry, .retryPassword:
             return false
         }
     }
@@ -98,7 +97,7 @@ enum EncryptionFlowStep: Equatable {
         switch self {
         case .encrypting(let url, _), .retryPassword(let url):
             return url
-        case .idle, .passwordEntry, .showingDestinationUnavailableAlert:
+        case .idle, .passwordEntry:
             return nil
         }
     }
@@ -107,7 +106,7 @@ enum EncryptionFlowStep: Equatable {
         switch self {
         case .encrypting(_, let password):
             return password
-        case .idle, .passwordEntry, .retryPassword, .showingDestinationUnavailableAlert:
+        case .idle, .passwordEntry, .retryPassword:
             return nil
         }
     }
@@ -318,15 +317,15 @@ final class FileViewModel: ObservableObject {
     // Main encryption function
     @MainActor
     func encryptAll(with password: String, to destination: URL, completion: @escaping (Bool, [String]) -> Void) async {
-        // Filter for files that can be encrypted (not corrupted, not already encrypted)
-        let encryptableItems = self.items.filter { $0.status == .notEncrypted }
+        // Filter for files that can be encrypted (not corrupted, not already encrypted, and failed files for retry)
+        let encryptableItems = self.items.filter { $0.status == .notEncrypted || $0.status == .encryptionFailed }
         
         guard !encryptableItems.isEmpty else {
             completion(false, [])
             return
         }
         
-        // Set all files to processing state
+        // Set all files to processing state (whether they were .notEncrypted or .encryptionFailed)
         for item in encryptableItems {
             self.update(item, .processing, nil)
         }
@@ -457,7 +456,7 @@ final class FileViewModel: ObservableObject {
             item.status == .encrypted || item.status == .decryptionFailed
         }
         hasUnencrypted = items.contains { item in
-            item.status == .notEncrypted
+            item.status == .notEncrypted || item.status == .encryptionFailed
         }
     }
     
@@ -513,7 +512,7 @@ struct ContentView: View {
     @State private var isTargeted = false
     
     // Encryption state  
-    @State private var preflightAlertInfo: (title: String, message: String)?
+    @State private var preflightAlertInfo: AlertInfo?
     @State private var currentEncryptionTask: Task<Void, Never>?
     @State private var encryptionFlow: EncryptionFlowStep = .idle
     
@@ -550,15 +549,24 @@ struct ContentView: View {
         } message: {
             Text("Some or all files failed to decrypt. Please try a different password or cancel to stop.")
         }
-        .sheet(isPresented: .constant(encryptionFlow.showsPasswordDialog)) {
+        .sheet(isPresented: Binding(
+            get: { encryptionFlow.showsPasswordDialog },
+            set: { if !$0 { encryptionFlow = .idle } }
+        )) {
             EncryptPasswordDialog(
                 isRetry: encryptionFlow.isRetryFlow,
                 onCancel: {
                     encryptionFlow = .idle
                 },
                 onEncrypt: { confirmedPassword in
-                    // Password comes back here - go directly to destination selection
-                    selectDestinationAndEncrypt(with: confirmedPassword)
+                    // Check if this is a retry with existing destination
+                    if encryptionFlow.isRetryFlow, let existingDestination = encryptionFlow.destinationURL {
+                        // Reuse existing destination for retry
+                        proceedWithEncryption(to: existingDestination, password: confirmedPassword)
+                    } else {
+                        // First attempt - go to destination selection
+                        selectDestinationAndEncrypt(with: confirmedPassword)
+                    }
                 }
             )
         }
@@ -588,10 +596,7 @@ struct ContentView: View {
                         message: Text(message),
                         dismissButton: .default(Text("OK")))
         }
-        .alert(item: Binding<AlertInfo?>(
-            get: { preflightAlertInfo.map { AlertInfo(title: $0.title, message: $0.message) } },
-            set: { _ in preflightAlertInfo = nil }
-        )) { info in
+        .alert(item: $preflightAlertInfo) { info in
             Alert(title: Text(info.title),
                   message: Text(info.message),
                   dismissButton: .default(Text("OK")))
@@ -797,6 +802,8 @@ struct ContentView: View {
      - Partial success handling with specific user feedback
      - Clean state transitions without dead-ends
      - Password-first flow for better UX
+     - Failed files can be retried without re-importing
+     - Retry flow reuses destination to avoid redundant folder selection
      */
     
     private func startEncryptionProcess() {
@@ -818,7 +825,7 @@ struct ContentView: View {
             
             // 1. Check destination write permissions
             guard verifyDestinationIsWritable(url: dest) else {
-                preflightAlertInfo = (
+                preflightAlertInfo = AlertInfo(
                     title: "Destination Not Writable",
                     message: "You do not have permission to save files to the chosen location. Please select a different folder."
                 )
@@ -829,7 +836,7 @@ struct ContentView: View {
             
             // 2. Check for sufficient disk space
             guard verifySufficientDiskSpace(for: vm.items, at: dest) else {
-                preflightAlertInfo = (
+                preflightAlertInfo = AlertInfo(
                     title: "Insufficient Disk Space",
                     message: "There may not be enough free space on the destination drive to save the encrypted files. Please free up space or choose a different location."
                 )
@@ -897,7 +904,7 @@ struct ContentView: View {
         // Check if destination is still available
         if !FileManager.default.fileExists(atPath: destination.path) {
             // Show destination unavailable alert
-            preflightAlertInfo = (
+            preflightAlertInfo = AlertInfo(
                 title: "Destination No Longer Available",
                 message: "The originally chosen directory is no longer available. Please select a new location."
             )
@@ -913,19 +920,21 @@ struct ContentView: View {
                 currentEncryptionTask = nil
                 
                 if success {
-                    // Check for partial failures
+                    // Handle partial success with specific feedback
                     if !failedFiles.isEmpty {
-                        // Some files succeeded, some failed - show partial success alert
-                        preflightAlertInfo = (
+                        preflightAlertInfo = AlertInfo(
                             title: "Partial Encryption Success",
                             message: "Some files could not be encrypted: \(failedFiles.joined(separator: ", ")). Successfully encrypted files have been saved."
                         )
                     }
-                    // Always return to idle after success (partial or complete)
                     encryptionFlow = .idle
                 } else {
-                    // All files failed, show retry dialog
-                    encryptionFlow = .retryPassword(destination)
+                    // Distinguish cancellation from genuine failure
+                    if failedFiles.isEmpty {
+                        encryptionFlow = .idle  // User cancelled
+                    } else {
+                        encryptionFlow = .retryPassword(destination)  // Real failure
+                    }
                 }
             }
         }
@@ -951,16 +960,18 @@ struct ContentView: View {
             if anySucceeded {
                 // Some files succeeded, show save dialog
                 self.chooseSaveDestination()
-                // Reset password prompts since we're done
+                // Clear password for security and reset prompts
+                self.password = ""
                 self.showPwdPrompt = false
                 self.showPasswordRetryPrompt = false
             } else if allFailed {
-                // All files failed, show retry dialog (infinite retries until cancel)
+                // All files failed, clear password and show retry dialog
+                self.password = ""
                 self.showPwdPrompt = false
                 self.showPasswordRetryPrompt = true
             } else {
                 // No decryptable files
-                // This shouldn't happen since button is disabled when no decryptable files
+                self.password = ""
                 self.showPwdPrompt = false
                 self.showPasswordRetryPrompt = false
             }
