@@ -62,16 +62,16 @@ struct AlertInfo: Identifiable {
 
 enum EncryptionFlowStep: Equatable {
     case idle
-    case destinationSelected(URL)
-    case encrypting(URL) 
+    case passwordEntry
+    case encrypting(URL, password: String) 
     case retryPassword(URL)
-    case destinationUnavailable
+    case showingDestinationUnavailableAlert
     
     var showsPasswordDialog: Bool {
         switch self {
-        case .destinationSelected, .retryPassword:
+        case .passwordEntry, .retryPassword:
             return true
-        case .idle, .encrypting, .destinationUnavailable:
+        case .idle, .encrypting, .showingDestinationUnavailableAlert:
             return false
         }
     }
@@ -80,7 +80,7 @@ enum EncryptionFlowStep: Equatable {
         switch self {
         case .retryPassword:
             return true
-        case .idle, .destinationSelected, .encrypting, .destinationUnavailable:
+        case .idle, .passwordEntry, .encrypting, .showingDestinationUnavailableAlert:
             return false
         }
     }
@@ -89,16 +89,25 @@ enum EncryptionFlowStep: Equatable {
         switch self {
         case .encrypting:
             return true
-        case .idle, .destinationSelected, .retryPassword, .destinationUnavailable:
+        case .idle, .passwordEntry, .retryPassword, .showingDestinationUnavailableAlert:
             return false
         }
     }
     
     var destinationURL: URL? {
         switch self {
-        case .destinationSelected(let url), .encrypting(let url), .retryPassword(let url):
+        case .encrypting(let url, _), .retryPassword(let url):
             return url
-        case .idle, .destinationUnavailable:
+        case .idle, .passwordEntry, .showingDestinationUnavailableAlert:
+            return nil
+        }
+    }
+    
+    var storedPassword: String? {
+        switch self {
+        case .encrypting(_, let password):
+            return password
+        case .idle, .passwordEntry, .retryPassword, .showingDestinationUnavailableAlert:
             return nil
         }
     }
@@ -356,11 +365,13 @@ final class FileViewModel: ObservableObject {
     // Process single file encryption
     @MainActor
     private func processEncryption(for item: FileItem, password: String, destination: URL) async -> (success: Bool, item: FileItem, failureReason: String?) {
+        // Calculate output URL on main thread before background work
+        let outputURL = generateUniqueURL(for: item.url.lastPathComponent, in: destination)
+        
         let result = await withCheckedContinuation { (continuation: CheckedContinuation<(Bool, String?), Never>) in
             DispatchQueue.global(qos: .userInitiated).async(execute: {
                 // Try without security scoped access first
                 if let doc = PDFDocument(url: item.url) {
-                    let outputURL = self.generateUniqueURL(for: item.url.lastPathComponent, in: destination)
                     
                     // Create properly-typed options dictionary
                     let writeOptions: [PDFDocumentWriteOption : Any] = [
@@ -387,8 +398,6 @@ final class FileViewModel: ObservableObject {
                     continuation.resume(returning: (false, "File could not be read."))
                     return
                 }
-                
-                let outputURL = self.generateUniqueURL(for: item.url.lastPathComponent, in: destination)
                 
                 // Create properly-typed options dictionary
                 // Note: Setting same password for both user and owner gives full permissions to anyone who can decrypt
@@ -503,10 +512,7 @@ struct ContentView: View {
     @State private var alertItem: FileItem?
     @State private var isTargeted = false
     
-    // Encryption state
-    @State private var encryptPassword = ""
-    @State private var encryptPasswordConfirm = ""
-    @State private var showPasswordText = false
+    // Encryption state  
     @State private var preflightAlertInfo: (title: String, message: String)?
     @State private var currentEncryptionTask: Task<Void, Never>?
     @State private var encryptionFlow: EncryptionFlowStep = .idle
@@ -546,16 +552,13 @@ struct ContentView: View {
         }
         .sheet(isPresented: .constant(encryptionFlow.showsPasswordDialog)) {
             EncryptPasswordDialog(
-                password: $encryptPassword,
-                passwordConfirm: $encryptPasswordConfirm,
-                showPasswordText: $showPasswordText,
                 isRetry: encryptionFlow.isRetryFlow,
                 onCancel: {
-                    clearMainPasswords()
                     encryptionFlow = .idle
                 },
-                onEncrypt: {
-                    attemptEncryption()
+                onEncrypt: { confirmedPassword in
+                    // Password comes back here - go directly to destination selection
+                    selectDestinationAndEncrypt(with: confirmedPassword)
                 }
             )
         }
@@ -592,9 +595,6 @@ struct ContentView: View {
             Alert(title: Text(info.title),
                   message: Text(info.message),
                   dismissButton: .default(Text("OK")))
-        }
-        .onChange(of: encryptionFlow) { _, newFlow in
-            handleFlowStateChange(newFlow)
         }
     }
 
@@ -776,31 +776,35 @@ struct ContentView: View {
     
     // MARK: - Encryption Flow
     
-    /*
+         /*
      Encryption Flow State Management:
      
      The encryption process follows a clean state machine pattern:
      
      .idle 
        ↓ (user clicks "Encrypt")
-     .destinationSelected(URL) → shows password dialog
-       ↓ (user enters password)
-     .encrypting(URL) → shows processing indicators  
-       ↓ (success/failure)
+     .passwordEntry → shows self-contained password dialog
+       ↓ (user enters password and clicks "Encrypt")
+     → password passed directly to destination selection
+       ↓ (user selects destination, pre-flight checks pass)
+     .encrypting(URL, password) → shows processing indicators  
+       ↓ (success/partial success/failure)
      .idle OR .retryPassword(URL)
      
-     Error handling:
-     - .destinationUnavailable → shows alert, returns to .idle
-     - .retryPassword(URL) → shows retry dialog with same destination
-     
-     Benefits over previous approach:
-     - No race conditions or arbitrary delays
-     - Explicit state transitions  
-     - Single source of truth for flow state
-     - Easy to reason about and debug
+     Key Design Improvements:
+     - Password dialog is self-contained (no state duplication)
+     - Password passed directly via closure (no race conditions)
+     - Partial success handling with specific user feedback
+     - Clean state transitions without dead-ends
+     - Password-first flow for better UX
      */
     
     private func startEncryptionProcess() {
+        // Start with password entry - no destination selection yet
+        encryptionFlow = .passwordEntry
+    }
+    
+    private func selectDestinationAndEncrypt(with password: String) {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
@@ -810,7 +814,7 @@ struct ContentView: View {
         panel.prompt = "Save Here"
         
         if panel.runModal() == .OK, let dest = panel.url {
-            // Pre-flight checks before showing password dialog
+            // Pre-flight checks before starting encryption
             
             // 1. Check destination write permissions
             guard verifyDestinationIsWritable(url: dest) else {
@@ -818,6 +822,8 @@ struct ContentView: View {
                     title: "Destination Not Writable",
                     message: "You do not have permission to save files to the chosen location. Please select a different folder."
                 )
+                // Return to password entry state so user can try again
+                encryptionFlow = .passwordEntry
                 return
             }
             
@@ -827,13 +833,16 @@ struct ContentView: View {
                     title: "Insufficient Disk Space",
                     message: "There may not be enough free space on the destination drive to save the encrypted files. Please free up space or choose a different location."
                 )
+                // Return to password entry state so user can try again
+                encryptionFlow = .passwordEntry
                 return
             }
             
-            // All checks passed, proceed to password dialog
-            clearMainPasswords()
-            showPasswordText = false
-            encryptionFlow = .destinationSelected(dest)
+            // All checks passed, start encryption
+            proceedWithEncryption(to: dest, password: password)
+        } else {
+            // User cancelled destination selection, return to idle
+            encryptionFlow = .idle
         }
     }
     
@@ -882,35 +891,41 @@ struct ContentView: View {
         }
     }
     
-    private func attemptEncryption() {
-        guard !encryptPassword.isEmpty, encryptPassword == encryptPasswordConfirm else { return }
-        guard let destination = encryptionFlow.destinationURL else { return }
-        
+
+    
+    private func proceedWithEncryption(to destination: URL, password: String) {
         // Check if destination is still available
         if !FileManager.default.fileExists(atPath: destination.path) {
-            // Transition to destination unavailable state - this will trigger re-selection
-            encryptionFlow = .destinationUnavailable
+            // Show destination unavailable alert
+            preflightAlertInfo = (
+                title: "Destination No Longer Available",
+                message: "The originally chosen directory is no longer available. Please select a new location."
+            )
+            encryptionFlow = .idle
             return
         }
         
         // Start encryption with cancellation support
-        encryptionFlow = .encrypting(destination)
-        let passwordCopy = encryptPassword // Capture password for async context
+        encryptionFlow = .encrypting(destination, password: password)
         
-        currentEncryptionTask = Task {
-            await vm.encryptAll(with: passwordCopy, to: destination) { success, failedFiles in
-                Task { @MainActor in
-                    // Secure password cleanup
-                    clearMainPasswords()
-                    currentEncryptionTask = nil
-                    
-                    if success {
-                        // Encryption succeeded, return to idle
-                        encryptionFlow = .idle
-                    } else {
-                        // All files failed, show retry dialog
-                        encryptionFlow = .retryPassword(destination)
+        currentEncryptionTask = Task { @MainActor in
+            await vm.encryptAll(with: password, to: destination) { success, failedFiles in
+                currentEncryptionTask = nil
+                
+                if success {
+                    // Check for partial failures
+                    if !failedFiles.isEmpty {
+                        // Some files succeeded, some failed - show partial success alert
+                        preflightAlertInfo = (
+                            title: "Partial Encryption Success",
+                            message: "Some files could not be encrypted: \(failedFiles.joined(separator: ", ")). Successfully encrypted files have been saved."
+                        )
                     }
+                    // Always return to idle after success (partial or complete)
+                    encryptionFlow = .idle
+                } else {
+                    // All files failed, show retry dialog
+                    encryptionFlow = .retryPassword(destination)
                 }
             }
         }
@@ -923,32 +938,8 @@ struct ContentView: View {
         // Reset any files that were in processing state
         vm.resetProcessingFiles()
         
-        // Secure password cleanup and return to idle
-        clearMainPasswords()
+        // Return to idle state
         encryptionFlow = .idle
-    }
-    
-    private func clearMainPasswords() {
-        // Zero out password memory
-        encryptPassword = ""
-        encryptPasswordConfirm = ""
-    }
-    
-    private func handleFlowStateChange(_ newFlow: EncryptionFlowStep) {
-        switch newFlow {
-        case .destinationUnavailable:
-            // Show alert and offer to re-select destination
-            preflightAlertInfo = (
-                title: "Destination No Longer Available",
-                message: "The originally chosen directory is no longer available. Please select a new location."
-            )
-            // After user dismisses the alert, they can manually restart the process
-            encryptionFlow = .idle
-            
-        case .idle, .destinationSelected, .encrypting, .retryPassword:
-            // These states are handled by their respective UI components
-            break
-        }
     }
     
     // MARK: - Decryption Flow
@@ -1192,12 +1183,9 @@ struct FooterView: View {
 
 // MARK: - Encrypt Password Dialog
 struct EncryptPasswordDialog: View {
-    @Binding var password: String
-    @Binding var passwordConfirm: String
-    @Binding var showPasswordText: Bool
     let isRetry: Bool
     let onCancel: () -> Void
-    let onEncrypt: () -> Void
+    let onEncrypt: (String) -> Void  // Now takes password as parameter
     
     // Local secure password storage
     @State private var localPassword = ""
@@ -1348,16 +1336,11 @@ struct EncryptPasswordDialog: View {
                  .controlSize(.large)
                  .tint(CustomColors.destructiveColor)
                  
-                 Button(isRetry ? "Try Again" : "Encrypt") {
-                     // Sync passwords and encrypt
-                     password = localPassword
-                     passwordConfirm = localPasswordConfirm
-                     showPasswordText = localShowPasswordText
-                     onEncrypt()
-                     
-                     // Clear local passwords after use
-                     clearPasswords()
-                 }
+                                 Button(isRetry ? "Try Again" : "Encrypt") {
+                    // Pass password directly and clear local state
+                    onEncrypt(localPassword)
+                    clearPasswords()
+                }
                  .buttonStyle(.borderedProminent)
                  .controlSize(.large)
                  .tint(CustomColors.accentColor)
@@ -1369,12 +1352,7 @@ struct EncryptPasswordDialog: View {
         .background(CustomColors.cardBackground)
         .cornerRadius(16)
         .shadow(color: CustomColors.shadow, radius: 20, x: 0, y: 10)
-        .onAppear {
-            // Initialize with existing values if any
-            localPassword = password
-            localPasswordConfirm = passwordConfirm
-            localShowPasswordText = showPasswordText
-        }
+
         .onDisappear {
             // Secure cleanup when dialog is dismissed
             clearPasswords()
