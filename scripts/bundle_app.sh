@@ -65,6 +65,22 @@ mkdir -p "${RESOURCES_DIR}"
 # Copy executable
 cp "${BUILD_DIR}/${APP_NAME}" "${MACOS_DIR}/"
 
+# Copy SwiftPM-generated resource bundles (e.g. Marcrypt_Marcrypt.bundle, which
+# carries help.html and processed assets) so Bundle.module resolves at runtime.
+# Without this the in-app Help window cannot load its content.
+shopt -s nullglob
+bundle_found=0
+for bundle in "${BUILD_DIR}"/*.bundle; do
+    cp -R "${bundle}" "${RESOURCES_DIR}/"
+    echo "📚 Bundled resource: $(basename "${bundle}")"
+    bundle_found=1
+done
+shopt -u nullglob
+if [ "${bundle_found}" = "0" ]; then
+    echo "❌ No SwiftPM resource bundle found in ${BUILD_DIR}; in-app Help would be unavailable."
+    exit 1
+fi
+
 # Copy/Generate Info.plist
 # We will use the existing one but update the version if needed via PlistBuddy
 # Assuming Info.plist exists in Marcrypt/Marcrypt/Info.plist
@@ -108,6 +124,16 @@ if [ -d "Marcrypt/Marcrypt/Assets.xcassets/AppIcon.appiconset" ]; then
     if ! xcrun actool Marcrypt/Marcrypt/Assets.xcassets --compile "${RESOURCES_DIR}" --platform macosx --minimum-deployment-target 14.0 --app-icon AppIcon --output-partial-info-plist "${BUILD_DIR}/assetcatalog.plist"; then
         echo "❌ Asset compilation failed!"
         exit 1
+    fi
+    # Merge the compiled asset catalog's icon key into Info.plist so the AppIcon
+    # from Assets.xcassets is used (the loose assets/ icns tree was removed).
+    if [ -f "${BUILD_DIR}/assetcatalog.plist" ]; then
+        ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "${BUILD_DIR}/assetcatalog.plist" 2>/dev/null || true)"
+        if [ -n "${ICON_NAME}" ]; then
+            /usr/libexec/PlistBuddy -c "Set :CFBundleIconName ${ICON_NAME}" "${CONTENTS_DIR}/Info.plist" 2>/dev/null \
+                || /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string ${ICON_NAME}" "${CONTENTS_DIR}/Info.plist"
+            echo "🎨 Set CFBundleIconName=${ICON_NAME}"
+        fi
     fi
 fi
 
