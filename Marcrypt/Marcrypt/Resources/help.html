@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font: -apple-system-body, system-ui, sans-serif;
+    line-height: 1.5; margin: 0; padding: 24px 28px;
+    color: #1d1d1f; background: transparent;
+  }
+  @media (prefers-color-scheme: dark) { body { color: #e8e8ed; } }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 28px 0 8px; padding-top: 8px;
+       border-top: 1px solid rgba(128,128,128,0.25); }
+  h3 { font-size: 15px; margin: 18px 0 4px; }
+  p, li { font-size: 14px; }
+  code { font-family: ui-monospace, Menlo, monospace; font-size: 13px;
+         background: rgba(128,128,128,0.15); padding: 1px 5px; border-radius: 4px; }
+  .lead { font-size: 15px; color: #6e6e73; margin-top: 0; }
+  @media (prefers-color-scheme: dark) { .lead { color: #a1a1a6; } }
+  .note { border-left: 3px solid #007aff; padding: 8px 12px; margin: 12px 0;
+          background: rgba(0,122,255,0.08); border-radius: 0 6px 6px 0; font-size: 13px; }
+  .warn { border-left-color: #ff9500; background: rgba(255,149,0,0.10); }
+  ul { padding-left: 22px; }
+  a { color: #007aff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  footer { margin-top: 32px; padding-top: 12px; font-size: 12px; color: #8e8e93;
+           border-top: 1px solid rgba(128,128,128,0.25); }
+</style>
+</head>
+<body>
+  <h1 id="marcrypt-help">Marcrypt Help</h1>
+  <p class="lead">Batch encryption, watermarking, and Bates numbering for PDF,
+  Word, and folders — entirely on your Mac. Nothing is ever uploaded.</p>
+
+  <div class="note">Marcrypt never connects to the internet. All processing
+  happens locally on your machine.</div>
+
+  <h2 id="getting-started">Getting started</h2>
+  <ol>
+    <li>Drag PDF, DOCX, ZIP, or folders onto the drop zone (or click to browse).</li>
+    <li>Review the file list — Marcrypt detects which items are already encrypted.</li>
+    <li>Set a password and click <strong>Encrypt</strong>, or use
+        <strong>Decrypt</strong> for protected files you have the password to.</li>
+  </ol>
+
+  <h2 id="encryption">Encryption</h2>
+  <h3>PDF</h3>
+  <p>PDFs are encrypted with a password to open. The owner (permissions)
+  password is always set to a value distinct from your open password, so opening
+  the file does not grant full permission rights.</p>
+  <h3>Word (DOCX)</h3>
+  <p>Word documents are encrypted using Microsoft's Office Agile Encryption
+  (AES-256, MS-OFFCRYPTO). The result opens natively in Microsoft Word with the
+  password you set.</p>
+  <h3>Folders &amp; ZIP</h3>
+  <p>Folders are archived into a password-protected ZIP using WinZip AES-256.</p>
+
+  <h2 id="watermark-bates">Watermarks &amp; Bates numbering</h2>
+  <p>Add a text watermark (e.g. <code>CONFIDENTIAL</code>) and/or sequential
+  Bates numbers to PDFs and DOCX files. Configure text, size, opacity, color,
+  and placement in <strong>Settings</strong>. Bates numbering continues
+  sequentially across a batch for legal-discovery workflows.</p>
+
+  <h2 id="restrictions">Word editing restrictions</h2>
+  <p>Read-only, comments-only, tracked-changes, and form-fill restrictions can
+  be applied to DOCX files.</p>
+  <div class="note warn">Editing restrictions are advisory. They are honored by
+  Microsoft Word but can be bypassed by other editors. Use document
+  <em>encryption</em> when you need real confidentiality.</div>
+
+  <h2 id="metadata">Stripping metadata</h2>
+  <p>Optionally remove identifying metadata (Author, Title, Company, Producer,
+  and similar) from PDF and DOCX files before encrypting. Originals are left
+  untouched unless you enable "Overwrite &amp; Remove Original Files."</p>
+
+  <h2 id="cleanup">Removing originals &amp; Clear History</h2>
+  <p>"Overwrite &amp; Remove Original Files" overwrites a file before deleting it.</p>
+  <div class="note warn">Overwrite-based deletion is best-effort. On modern SSDs
+  and APFS, wear-leveling and copy-on-write can leave earlier data blocks beyond
+  any application's control. Treat it as convenience cleanup, not guaranteed
+  forensic erasure.</div>
+  <p><strong>Clear History</strong> (in Settings) removes app logs, audit
+  history, temporary processing files, dropped-file staging, and the current
+  file list.</p>
+
+  <h2 id="password-recovery">Forgotten passwords</h2>
+  <p>Marcrypt can try a short list of common passwords against a file you own
+  but can no longer open. This is a convenience for recovering your own
+  documents — it is not a cracking tool and will not defeat a strong password.</p>
+
+  <h2 id="privacy">Privacy &amp; security</h2>
+  <ul>
+    <li>100% local processing — no network access, by design.</li>
+    <li>Standard, audited cryptography (AES-256 via Apple frameworks).</li>
+    <li>Audit logging and verbose diagnostics are <strong>off by default</strong>
+        and can be cleared at any time.</li>
+  </ul>
+
+  <h2 id="open-source-licenses">Open-source licenses</h2>
+  <p>Marcrypt is released under the MIT License. It uses the following
+  open-source components:</p>
+  <ul>
+    <li><strong>ZipArchive (SSZipArchive)</strong> — MIT License.</li>
+    <li><strong>swift-argument-parser</strong> — Apache License 2.0.</li>
+    <li><strong>POLE</strong> (OLE compound-file library) — BSD License.</li>
+  </ul>
+  <p>Full license texts are included with the source at
+  <a href="https://github.com/LegalMarc/Marcrypt">github.com/LegalMarc/Marcrypt</a>.</p>
+
+  <footer>Marcrypt — released by Marc Mandel under the MIT License.
+  Questions or bugs? <a href="https://www.linkedin.com/in/marcmandel/">Reach me
+  on LinkedIn</a>.</footer>
+</body>
+</html>

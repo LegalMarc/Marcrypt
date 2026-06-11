@@ -1,0 +1,21 @@
+name: Public Beta Validation
+
+on:
+  push:
+    branches: ["main", "codex/**"]
+  pull_request:
+
+jobs:
+  credential-free-validation:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Run public beta gate
+        run: scripts/test_all.sh
+
+      - name: Check metadata consistency
+        run: python3 scripts/check_metadata_consistency.py

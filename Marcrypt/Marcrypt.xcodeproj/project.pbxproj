@@ -1,0 +1,618 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		8C1A3F4B5D6E7890A1B2C3D4 /* MarcryptCore in Frameworks */ = {isa = PBXBuildFile; productRef = 8C1A3F4B5D6E7890A1B2C3D5 /* MarcryptCore */; };
+		8C1A3F4B5D6E7890A1B2C3D6 /* MarcryptUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C1A3F4B5D6E7890A1B2C3D7 /* MarcryptUITests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		25507EDC2E1DF0CE002C547F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 25507EC32E1DF0CD002C547F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 25507ECA2E1DF0CD002C547F;
+			remoteInfo = Marcrypt;
+		};
+		25507EE62E1DF0CE002C547F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 25507EC32E1DF0CD002C547F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 25507ECA2E1DF0CD002C547F;
+			remoteInfo = Marcrypt;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		25507ECB2E1DF0CD002C547F /* Marcrypt.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Marcrypt.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		25507EDB2E1DF0CE002C547F /* Marcrypt Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Marcrypt Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		25507EE52E1DF0CE002C547F /* Marcrypt UITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Marcrypt UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		8C1A3F4B5D6E7890A1B2C3D7 /* MarcryptUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarcryptUITests.swift; sourceTree = "<group>"; };
+	/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		8C1A3F4B5D6E7890A1B2C3D9 /* Exceptions for "Marcrypt" folder in "Marcrypt" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 25507ECA2E1DF0CD002C547F /* Marcrypt */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		25507ECD2E1DF0CD002C547F /* Marcrypt */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				8C1A3F4B5D6E7890A1B2C3D9 /* Exceptions for "Marcrypt" folder in "Marcrypt" target */,
+			);
+			path = Marcrypt;
+			sourceTree = "<group>";
+		};
+		25507EDE2E1DF0CE002C547F /* MarcryptTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ../Tests/MarcryptTests;
+			sourceTree = "<group>";
+		};
+		25507EE82E1DF0CE002C547F /* UITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ../Tests/UITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		25507EC82E1DF0CD002C547F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8C1A3F4B5D6E7890A1B2C3D4 /* MarcryptCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		25507ED82E1DF0CE002C547F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		25507EE22E1DF0CE002C547F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		25507EC22E1DF0CD002C547F = {
+			isa = PBXGroup;
+			children = (
+				25507ECD2E1DF0CD002C547F /* Marcrypt */,
+				25507EDE2E1DF0CE002C547F /* MarcryptTests */,
+				8C1A3F4B5D6E7890A1B2C3D8 /* XcodeUITests */,
+				25507ECC2E1DF0CD002C547F /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		8C1A3F4B5D6E7890A1B2C3D8 /* XcodeUITests */ = {
+			isa = PBXGroup;
+			children = (
+				8C1A3F4B5D6E7890A1B2C3D7 /* MarcryptUITests.swift */,
+			);
+			path = ../Tests/UITests;
+			sourceTree = "<group>";
+		};
+		25507ECC2E1DF0CD002C547F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				25507ECB2E1DF0CD002C547F /* Marcrypt.app */,
+				25507EDB2E1DF0CE002C547F /* Marcrypt Tests.xctest */,
+				25507EE52E1DF0CE002C547F /* Marcrypt UITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		25507ECA2E1DF0CD002C547F /* Marcrypt */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 25507EEF2E1DF0CE002C547F /* Build configuration list for PBXNativeTarget "Marcrypt" */;
+			buildPhases = (
+				25507EC72E1DF0CD002C547F /* Sources */,
+				25507EC82E1DF0CD002C547F /* Frameworks */,
+				25507EC92E1DF0CD002C547F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				25507ECD2E1DF0CD002C547F /* Marcrypt */,
+			);
+			name = Marcrypt;
+			packageProductDependencies = (
+				8C1A3F4B5D6E7890A1B2C3D5 /* MarcryptCore */,
+			);
+			productName = Marcrypt;
+			productReference = 25507ECB2E1DF0CD002C547F /* Marcrypt.app */;
+			productType = "com.apple.product-type.application";
+		};
+		25507EDA2E1DF0CE002C547F /* Marcrypt Tests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 25507EF22E1DF0CE002C547F /* Build configuration list for PBXNativeTarget "Marcrypt Tests" */;
+			buildPhases = (
+				25507ED72E1DF0CE002C547F /* Sources */,
+				25507ED82E1DF0CE002C547F /* Frameworks */,
+				25507ED92E1DF0CE002C547F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				25507EDD2E1DF0CE002C547F /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				25507EDE2E1DF0CE002C547F /* MarcryptTests */,
+			);
+			name = "Marcrypt Tests";
+			packageProductDependencies = (
+			);
+			productName = MarcryptTests;
+			productReference = 25507EDB2E1DF0CE002C547F /* Marcrypt Tests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		25507EE42E1DF0CE002C547F /* Marcrypt UITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 25507EF52E1DF0CE002C547F /* Build configuration list for PBXNativeTarget "Marcrypt UITests" */;
+			buildPhases = (
+				25507EE12E1DF0CE002C547F /* Sources */,
+				25507EE22E1DF0CE002C547F /* Frameworks */,
+				25507EE32E1DF0CE002C547F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				25507EE72E1DF0CE002C547F /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+			);
+			name = "Marcrypt UITests";
+			packageProductDependencies = (
+			);
+			productName = MarcryptUITests;
+			productReference = 25507EE52E1DF0CE002C547F /* Marcrypt UITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		25507EC32E1DF0CD002C547F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
+				ORGANIZATIONNAME = "Marc Mandel";
+				TargetAttributes = {
+					25507ECA2E1DF0CD002C547F = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					25507EDA2E1DF0CE002C547F = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 25507ECA2E1DF0CD002C547F;
+					};
+					25507EE42E1DF0CE002C547F = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 25507ECA2E1DF0CD002C547F;
+					};
+				};
+			};
+			buildConfigurationList = 25507EC62E1DF0CD002C547F /* Build configuration list for PBXProject "Marcrypt" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 25507EC22E1DF0CD002C547F;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				8C1A3F4B5D6E7890A1B2C3D3 /* XCLocalSwiftPackageReference ".." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 25507ECC2E1DF0CD002C547F /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				25507ECA2E1DF0CD002C547F /* Marcrypt */,
+				25507EDA2E1DF0CE002C547F /* Marcrypt Tests */,
+				25507EE42E1DF0CE002C547F /* Marcrypt UITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		25507EC92E1DF0CD002C547F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		25507ED92E1DF0CE002C547F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		25507EE32E1DF0CE002C547F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		25507EC72E1DF0CD002C547F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		25507ED72E1DF0CE002C547F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		25507EE12E1DF0CE002C547F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8C1A3F4B5D6E7890A1B2C3D6 /* MarcryptUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		25507EDD2E1DF0CE002C547F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 25507ECA2E1DF0CD002C547F /* Marcrypt */;
+			targetProxy = 25507EDC2E1DF0CE002C547F /* PBXContainerItemProxy */;
+		};
+		25507EE72E1DF0CE002C547F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 25507ECA2E1DF0CD002C547F /* Marcrypt */;
+			targetProxy = 25507EE62E1DF0CE002C547F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		25507EED2E1DF0CE002C547F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = QG85EMCQ75;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		25507EEE2E1DF0CE002C547F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = QG85EMCQ75;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		25507EF02E1DF0CE002C547F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = Marcrypt/Marcrypt.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QG85EMCQ75;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Marcrypt/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marclaw.Marcrypt;
+				PRODUCT_NAME = Marcrypt;
+				REGISTER_APP_GROUPS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		25507EF12E1DF0CE002C547F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = Marcrypt/Marcrypt.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QG85EMCQ75;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Marcrypt/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marclaw.Marcrypt;
+				PRODUCT_NAME = Marcrypt;
+				REGISTER_APP_GROUPS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		25507EF32E1DF0CE002C547F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QG85EMCQ75;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marclaw.MarcryptTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Marcrypt.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Marcrypt";
+			};
+			name = Debug;
+		};
+		25507EF42E1DF0CE002C547F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QG85EMCQ75;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marclaw.MarcryptTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Marcrypt.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Marcrypt";
+			};
+			name = Release;
+		};
+		25507EF62E1DF0CE002C547F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QG85EMCQ75;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marclaw.MarcryptUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Marcrypt;
+			};
+			name = Debug;
+		};
+		25507EF72E1DF0CE002C547F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QG85EMCQ75;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marclaw.MarcryptUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Marcrypt;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		25507EC62E1DF0CD002C547F /* Build configuration list for PBXProject "Marcrypt" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				25507EED2E1DF0CE002C547F /* Debug */,
+				25507EEE2E1DF0CE002C547F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		25507EEF2E1DF0CE002C547F /* Build configuration list for PBXNativeTarget "Marcrypt" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				25507EF02E1DF0CE002C547F /* Debug */,
+				25507EF12E1DF0CE002C547F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		25507EF22E1DF0CE002C547F /* Build configuration list for PBXNativeTarget "Marcrypt Tests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				25507EF32E1DF0CE002C547F /* Debug */,
+				25507EF42E1DF0CE002C547F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		25507EF52E1DF0CE002C547F /* Build configuration list for PBXNativeTarget "Marcrypt UITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				25507EF62E1DF0CE002C547F /* Debug */,
+				25507EF72E1DF0CE002C547F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		8C1A3F4B5D6E7890A1B2C3D3 /* XCLocalSwiftPackageReference ".." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8C1A3F4B5D6E7890A1B2C3D5 /* MarcryptCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8C1A3F4B5D6E7890A1B2C3D3 /* XCLocalSwiftPackageReference ".." */;
+			productName = MarcryptCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 25507EC32E1DF0CD002C547F /* Project object */;
+}

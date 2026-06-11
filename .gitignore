@@ -1,0 +1,95 @@
+# General
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Directories to ignore
+ignore-resources/
+
+# Build artifacts (if ever generated in root)
+build/
+archive/
+
+# Zip files
+*.zip
+
+# Xcode
+DerivedData/
+*.xcworkspace
+*.xcuserdata
+*.xccheckout
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/
+
+# Swift Package Manager
+.build/
+Packages/
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Archives
+*.xcarchive
+
+# Logs
+*.log
+
+# IDE Helpers
+*.swp
+*.swo
+.idea/
+*.orig
+
+# Temporary files
+*.tmp
+*.bak
+
+# Output bundles
+*.ipa
+*.app
+*.dSYM.zip
+*.dSYM
+
+# Crash reports
+*.crash
+
+# Xcode Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# Unit test coverage
+*.gcda
+
+# SwiftPM automatic indexing
+.swiftpm/
+
+# Secrets — match all variants
+.env
+.env.*
+*.env
+.env (1)
+*.env.local
+!.env.example
+
+# Accidental local artifacts
+.venv*/
+test_output*/
+._harness_output*/
+build_log.txt
+test_output.txt
+dummy.pdf
+
+# Editor-duplicated files (macOS Finder "file (1).ext" copies)
+*\ (1)*
+
+# macOS metadata
+.DS_Store
