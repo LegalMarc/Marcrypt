@@ -19,3 +19,6 @@ jobs:
 
       - name: Check metadata consistency
         run: python3 scripts/check_metadata_consistency.py
+
+      - name: Publish-safety guard (no confidential docs or forbidden content)
+        run: python3 scripts/check_publishable.py

@@ -155,6 +155,7 @@ main() {
         scripts/release_readiness_gate.sh
     run_logged "release guard checks" "${RELEASE_GUARDS_LOG}" python3 scripts/check_release_guards.py
     run_logged "metadata consistency checks" "${METADATA_LOG}" python3 scripts/check_metadata_consistency.py
+    run_logged "publish-safety guard" "${LOG_DIR}/publishable.log" python3 scripts/check_publishable.py
 
     run_logged "swift test" "${SWIFT_TEST_LOG}" swift test --disable-index-store
     run_logged "swift test skip allowlist" "${LOG_DIR}/swift-test-skips.log" python3 scripts/check_test_skips.py "${SWIFT_TEST_LOG}"

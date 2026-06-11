@@ -1,0 +1,14 @@
+#!/bin/sh
+# Marcrypt pre-commit guard.
+# Blocks commits that would publish confidential documents (PDF/DOCX/ZIP/...)
+# or forbidden content (client names, internal codenames/ticket ids, credentials).
+#
+# Enable once per clone:
+#   git config core.hooksPath .githooks
+root="$(git rev-parse --show-toplevel)"
+if ! python3 "$root/scripts/check_publishable.py"; then
+    echo
+    echo "pre-commit blocked: see scripts/check_publishable.py output above." >&2
+    echo "Confidential documents belong in the git-ignored ignore-resources/ tree." >&2
+    exit 1
+fi

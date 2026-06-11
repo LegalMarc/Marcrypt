@@ -10,8 +10,33 @@ ignore-resources/
 build/
 archive/
 
-# Zip files
+# Confidential document & archive types — never commit; may contain client or
+# personal data. Real sample documents live under the git-ignored
+# ignore-resources/ tree. A synthetic, non-confidential fixture (if ever needed)
+# can be force-added with `git add -f` and must pass scripts/check_publishable.py.
+*.pdf
+*.doc
+*.docx
+*.dot
+*.dotx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+*.pages
+*.numbers
+*.key
+*.rtf
+*.odt
+*.ods
+*.odp
 *.zip
+
+# Signing / provisioning material — never commit.
+*.p12
+*.cer
+*.mobileprovision
+*.provisionprofile
 
 # Xcode
 DerivedData/
@@ -93,3 +118,7 @@ dummy.pdf
 
 # macOS metadata
 .DS_Store
+
+# Python
+__pycache__/
+*.pyc
