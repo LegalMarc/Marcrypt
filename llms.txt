@@ -1,0 +1,36 @@
+# Marcrypt
+
+> Local document encryption for legal professionals. Batch-encrypt, watermark,
+> and Bates-number PDF, Word, and folder contents entirely on macOS. Marcrypt
+> makes no network calls by design, so client data never leaves the machine.
+
+Marcrypt ships a SwiftUI macOS app, a `MarcryptCLI` command-line interface, and
+a `MarcryptCore` library shared by both. Cryptography comes from Apple
+frameworks (CommonCrypto, CryptoKit, PDFKit) plus WinZip AES-256 for archives
+and Microsoft Agile Encryption for DOCX.
+
+Start at `docs/INDEX.md`. It carries one line per document with a scope
+sentence, heading anchors, and the code globs each document describes.
+
+## Docs
+
+- [Docs index](docs/INDEX.md): The projection. One line per document; read this first and jump to the section you need.
+- [Domain glossary](docs/CONTEXT.md): Marcrypt vocabulary — Bates numbering, Agile Encryption, shredding, audit trail, batch receipt.
+- [Product requirements](docs/PRODUCT_REQUIREMENTS.md): Authoritative goals, core features, UI and technical requirements for 1.0.
+- [Release notes 1.0.0-beta](docs/RELEASE_NOTES_v1.0.0-beta.md): User-facing highlights, install steps, and known limitations.
+
+## Build and release
+
+- [Build setup](docs/BUILD_SETUP.md): Signing configuration and how to run the direct-distribution build scripts.
+- [App Store build guide](docs/APP_STORE_BUILD_GUIDE.md): Why direct distribution and App Store submission are separate paths, plus export compliance.
+
+## Testing
+
+- [Testing gates](docs/backlog/testing-gap-closure.md): The six validation gates, from fast local checks to signed-app smoke and release dry run.
+- [Core E2E testing](docs/core_e2e_testing.md): Headless validation of encryption, watermark, Bates, and archive behavior via CoreE2EHarness.
+- [CLI harness matrix](docs/cli_harness_test_matrix.md): Scenario coverage and expected behavior for the MarcryptCLI harness.
+
+## Optional
+
+- [README](README.md): Public overview, feature list, security model, and build-from-source instructions.
+- [Backlog](docs/backlog.md): Running list of confirmed follow-ups.
