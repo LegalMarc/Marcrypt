@@ -10,9 +10,10 @@ set -euo pipefail
 APP_NAME="Marcrypt"
 BUNDLE_ID="com.marclaw.Marcrypt"
 
-# Signing Configuration - UPDATE THESE WITH YOUR CREDENTIALS
-DEVELOPER_ID="Developer ID Application: Marc Mandel (QG85EMCQ75)"
-TEAM_ID="QG85EMCQ75"
+# Signing Configuration.
+# Values resolve in this order: command-line args > environment > .env > defaults.
+# The defaults are applied further below, after .env is sourced, so that callers
+# can genuinely override them. Do not assign them here.
 
 # Paths (absolute to avoid cwd issues)
 # Get the directory of this script, then go up one level to find repo root
@@ -29,9 +30,11 @@ if [ -f "${ENV_FILE}" ]; then
     source "${ENV_FILE}"
 fi
 
-# Default credentials (can be overridden by .env or command line)
-DEVELOPER_ID="${DEVELOPER_ID:-Developer ID Application: Marc Mandel (QG85EMCQ75)}"
-TEAM_ID="${TEAM_ID:-QG85EMCQ75}"
+# Default credentials (overridable by environment, .env, or command line).
+# Accept the SIGNING_IDENTITY / APPLE_TEAM_ID spellings used by .env and
+# bundle_app.sh as equivalents, so one .env works for every script.
+DEVELOPER_ID="${DEVELOPER_ID:-${SIGNING_IDENTITY:-Developer ID Application: Marc Mandel (QG85EMCQ75)}}"
+TEAM_ID="${TEAM_ID:-${APPLE_TEAM_ID:-QG85EMCQ75}}"
 
 BUILD_DIR="${ROOT_DIR}/ignore-resources/build"
 ARCHIVE_DIR="${ROOT_DIR}/ignore-resources/archive"

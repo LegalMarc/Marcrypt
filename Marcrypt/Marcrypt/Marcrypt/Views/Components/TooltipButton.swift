@@ -1,4 +1,5 @@
 import SwiftUI
+import MarcryptCore
 
 /// A reusable tooltip button with a hover-delayed popover.
 /// Accent-colored icon button with hover scale animation and rich help tooltip.

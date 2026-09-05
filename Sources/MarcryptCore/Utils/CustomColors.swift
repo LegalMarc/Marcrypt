@@ -91,7 +91,7 @@ public struct CustomColors {
             return Color.black.opacity(0.1)
         case .dark:
             // Crisp border for definition
-            return Color(red: 86/255, green: 95/255, blue: 137/255).opacity(0.3)
+            return Color(red: 86/255, green: 95/255, blue: 137/255).opacity(0.5)
         @unknown default:
             return Color.black.opacity(0.1)
         }

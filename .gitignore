@@ -122,3 +122,6 @@ dummy.pdf
 # Python
 __pycache__/
 *.pyc
+
+# Local agent/session config and worktrees (never publish)
+.claude/
